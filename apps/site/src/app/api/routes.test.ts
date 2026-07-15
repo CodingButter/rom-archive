@@ -102,6 +102,16 @@ describe("GET /api/item", () => {
     expect(body).not.toHaveProperty("page");
   });
 
+  it("treats a blank q as absent and keeps the full-list shape", async () => {
+    stubFetch(realMetadata);
+    const { GET } = await import("./item/route");
+    const res = await GET(new Request("http://t/api/item?id=gbahomebrew&q="));
+    const body = await res.json();
+    expect(ItemDetailResponseSchema.safeParse(body).success).toBe(true);
+    expect(body).not.toHaveProperty("total");
+    expect(body).not.toHaveProperty("page");
+  });
+
   it("forwards page/pageSize and returns a bounded paginated response", async () => {
     stubFetch(realMetadata);
     const { GET } = await import("./item/route");
