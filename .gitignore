@@ -35,6 +35,9 @@ apps/3ds/spike/banner.wav
 .idea/
 .vscode/
 
+# Local MCP server config
+.mcp.json
+
 # Plan / progress / amendments (run state, never committed)
 .mastracode/plans/rom-archive.md
 .mastracode/plans/rom-archive.progress.md
