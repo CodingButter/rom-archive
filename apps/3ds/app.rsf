@@ -1,0 +1,24 @@
+# makerom RSF for the ROM Archive CIA.
+# Kept lean: makerom's `-desc app:4` supplies the AccessControlInfo defaults, so
+# this RSF only declares title metadata + the unique id. UniqueId 0xFF3FE sits
+# in the homebrew test range (title id 0004000000FF3FE00).
+BasicInfo:
+  Title                   : rom-archive
+  CompanyCode             : "00"
+  ProductCode             : CTR-P-RARC
+  Logo                    : Homebrew
+
+TitleInfo:
+  Category                : Application
+  UniqueId                : 0xFF3FE
+
+Option:
+  UseOnSD                 : true
+  FreeProductCode         : true
+  MediaFootPadding        : false
+  EnableCompress          : true
+
+SystemControlInfo:
+  SaveDataSize            : 0K
+  RemasterVersion        : 0
+  StackSize               : 0x40000
