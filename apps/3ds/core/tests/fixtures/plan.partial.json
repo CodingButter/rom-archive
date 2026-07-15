@@ -1,0 +1,63 @@
+{
+  "fits": false,
+  "totalBytes": 1996920,
+  "freeSpaceBytes": 2300000,
+  "files": [
+    {
+      "name": "Deadpool (USA) (Unl).gba",
+      "sizeBytes": 948344,
+      "md5": "6a402001d1716dd5a79a6fd2b1f67853",
+      "downloadUrl": "https://archive.org/download/gbahomebrew/Deadpool%20(USA)%20(Unl).gba",
+      "targetPath": "roms/gba/Deadpool (USA) (Unl).gba"
+    },
+    {
+      "name": "Super Star Shooter Advance (Japan) (Unl).gba",
+      "sizeBytes": 1048576,
+      "md5": "8111413c8ce62e90d5ef6087edb5b4be",
+      "downloadUrl": "https://archive.org/download/gbahomebrew/Super%20Star%20Shooter%20Advance%20(Japan)%20(Unl).gba",
+      "targetPath": "roms/gba/Super Star Shooter Advance (Japan) (Unl).gba"
+    }
+  ],
+  "excluded": [
+    {
+      "name": "Blast Arena Advance (USA) (Unl).gba",
+      "sizeBytes": 1242292,
+      "reason": "insufficient-space"
+    },
+    {
+      "name": "Anguna - Warriors of Virtue (USA) (Unl).gba",
+      "sizeBytes": 1710888,
+      "reason": "insufficient-space"
+    },
+    {
+      "name": "Waimanu - Grinding Blocks Adventure (USA) (Unl).gba",
+      "sizeBytes": 1739504,
+      "reason": "insufficient-space"
+    },
+    {
+      "name": "World Reborn (USA) (Unl).gba",
+      "sizeBytes": 4194304,
+      "reason": "insufficient-space"
+    },
+    {
+      "name": "Gorf (USA) (Unl).gba",
+      "sizeBytes": 4740332,
+      "reason": "insufficient-space"
+    },
+    {
+      "name": "Celeste Classic (USA) (Unl).gba",
+      "sizeBytes": 5416932,
+      "reason": "insufficient-space"
+    },
+    {
+      "name": "Qwak (Europe) (Unl).gba",
+      "sizeBytes": 8388608,
+      "reason": "insufficient-space"
+    },
+    {
+      "name": "Broken Circle (Europe) (Unl).gba",
+      "sizeBytes": 16777216,
+      "reason": "insufficient-space"
+    }
+  ]
+}

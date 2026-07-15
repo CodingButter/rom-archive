@@ -1,0 +1,66 @@
+{
+  "id": "gbahomebrew",
+  "console": "gba",
+  "files": [
+    {
+      "name": "Anguna - Warriors of Virtue (USA) (Unl).gba",
+      "sizeBytes": 1710888,
+      "md5": "9d3a663de5228414d7e6cda7244c5d91",
+      "downloadUrl": "https://archive.org/download/gbahomebrew/Anguna%20-%20Warriors%20of%20Virtue%20(USA)%20(Unl).gba"
+    },
+    {
+      "name": "Blast Arena Advance (USA) (Unl).gba",
+      "sizeBytes": 1242292,
+      "md5": "7b6a1caca13b3b7a82880db97fc40423",
+      "downloadUrl": "https://archive.org/download/gbahomebrew/Blast%20Arena%20Advance%20(USA)%20(Unl).gba"
+    },
+    {
+      "name": "Broken Circle (Europe) (Unl).gba",
+      "sizeBytes": 16777216,
+      "md5": "09c14005c7e4914a54ca9f5cf7514992",
+      "downloadUrl": "https://archive.org/download/gbahomebrew/Broken%20Circle%20(Europe)%20(Unl).gba"
+    },
+    {
+      "name": "Celeste Classic (USA) (Unl).gba",
+      "sizeBytes": 5416932,
+      "md5": "d5b7c99707098401f12f6e4dfac87c9f",
+      "downloadUrl": "https://archive.org/download/gbahomebrew/Celeste%20Classic%20(USA)%20(Unl).gba"
+    },
+    {
+      "name": "Deadpool (USA) (Unl).gba",
+      "sizeBytes": 948344,
+      "md5": "6a402001d1716dd5a79a6fd2b1f67853",
+      "downloadUrl": "https://archive.org/download/gbahomebrew/Deadpool%20(USA)%20(Unl).gba"
+    },
+    {
+      "name": "Gorf (USA) (Unl).gba",
+      "sizeBytes": 4740332,
+      "md5": "56a82b23d2f467070b2cdc99998788c5",
+      "downloadUrl": "https://archive.org/download/gbahomebrew/Gorf%20(USA)%20(Unl).gba"
+    },
+    {
+      "name": "Qwak (Europe) (Unl).gba",
+      "sizeBytes": 8388608,
+      "md5": "2c464384922d5a145559c61ed8664113",
+      "downloadUrl": "https://archive.org/download/gbahomebrew/Qwak%20(Europe)%20(Unl).gba"
+    },
+    {
+      "name": "Super Star Shooter Advance (Japan) (Unl).gba",
+      "sizeBytes": 1048576,
+      "md5": "8111413c8ce62e90d5ef6087edb5b4be",
+      "downloadUrl": "https://archive.org/download/gbahomebrew/Super%20Star%20Shooter%20Advance%20(Japan)%20(Unl).gba"
+    },
+    {
+      "name": "Waimanu - Grinding Blocks Adventure (USA) (Unl).gba",
+      "sizeBytes": 1739504,
+      "md5": "dd849fc5fe36531624d152c0d17e4799",
+      "downloadUrl": "https://archive.org/download/gbahomebrew/Waimanu%20-%20Grinding%20Blocks%20Adventure%20(USA)%20(Unl).gba"
+    },
+    {
+      "name": "World Reborn (USA) (Unl).gba",
+      "sizeBytes": 4194304,
+      "md5": "e958226d3b1dfc69e2523ddb19313eee",
+      "downloadUrl": "https://archive.org/download/gbahomebrew/World%20Reborn%20(USA)%20(Unl).gba"
+    }
+  ]
+}

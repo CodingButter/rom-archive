@@ -1,0 +1,23 @@
+{
+  "entries": [
+    {
+      "id": "gbahomebrew",
+      "title": "GBA Homebrew & Unlicensed",
+      "console": "gba",
+      "kind": "bundle"
+    },
+    {
+      "id": "nes-homebrew-collection",
+      "title": "NES Homebrew Collection",
+      "console": "nes",
+      "kind": "bundle",
+      "approxSizeBytes": 5242880
+    },
+    {
+      "id": "some-single-rom",
+      "title": "A Single Game Boy Game",
+      "console": "gb",
+      "kind": "single"
+    }
+  ]
+}
