@@ -1,0 +1,23 @@
+{
+  "code": 200,
+  "status": "Success",
+  "remaining_monthly_allowance": 998,
+  "extra_allowance": 0,
+  "data": {
+    "count": 0,
+    "games": []
+  },
+  "include": {
+    "boxart": {
+      "base_url": {
+        "original": "https://cdn.thegamesdb.net/images/original/",
+        "small": "https://cdn.thegamesdb.net/images/small/",
+        "thumb": "https://cdn.thegamesdb.net/images/thumb/",
+        "cropped_center_thumb": "https://cdn.thegamesdb.net/images/cropped_center_thumb/",
+        "medium": "https://cdn.thegamesdb.net/images/medium/",
+        "large": "https://cdn.thegamesdb.net/images/large/"
+      },
+      "data": {}
+    }
+  }
+}
