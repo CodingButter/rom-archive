@@ -1,20 +1,78 @@
 [
   {
+    "id": "No-Intro_NES",
+    "title": "Nintendo Entertainment System — No-Intro Full Set",
+    "console": "nes",
+    "kind": "bundle",
+    "approxSizeBytes": 904272100
+  },
+  {
+    "id": "No-Intro_Super_Nintendo_SNES",
+    "title": "Super Nintendo — No-Intro Full Set",
+    "console": "snes",
+    "kind": "bundle",
+    "approxSizeBytes": 3723057590
+  },
+  {
+    "id": "No-Intro_GBA",
+    "title": "Game Boy Advance — No-Intro Full Set",
+    "console": "gba",
+    "kind": "bundle",
+    "approxSizeBytes": 11700254272
+  },
+  {
+    "id": "No-Intro_GBC",
+    "title": "Game Boy Color — No-Intro Full Set",
+    "console": "gbc",
+    "kind": "bundle",
+    "approxSizeBytes": 797037420
+  },
+  {
+    "id": "No-Intro_GB",
+    "title": "Game Boy — No-Intro Full Set",
+    "console": "gb",
+    "kind": "bundle",
+    "approxSizeBytes": 202784144
+  },
+  {
+    "id": "ni-n-ds-dec_202401",
+    "title": "Nintendo DS (Decrypted) — No-Intro Full Set",
+    "console": "nds",
+    "kind": "bundle",
+    "approxSizeBytes": 5306671976
+  },
+  {
+    "id": "ef_mega_genesis_no-intro_2024-04-21",
+    "title": "Sega Mega Drive / Genesis — No-Intro Full Set",
+    "console": "md",
+    "kind": "bundle",
+    "approxSizeBytes": 2524223542
+  },
+  {
+    "id": "nointro.ms-mkiii",
+    "title": "Sega Master System — No-Intro Full Set",
+    "console": "sms",
+    "kind": "bundle",
+    "approxSizeBytes": 78367732
+  },
+  {
+    "id": "nointro.gg",
+    "title": "Sega Game Gear — No-Intro Full Set",
+    "console": "gg",
+    "kind": "bundle",
+    "approxSizeBytes": 140204412
+  },
+  {
+    "id": "ef_pce_No-Intro_2024",
+    "title": "NEC PC Engine / TurboGrafx-16 — No-Intro Full Set",
+    "console": "pce",
+    "kind": "bundle",
+    "approxSizeBytes": 110950918
+  },
+  {
     "id": "gbahomebrew",
     "title": "GBA Homebrew & Unlicensed",
     "console": "gba",
-    "kind": "bundle"
-  },
-  {
-    "id": "nes-homebrew-collection",
-    "title": "NES Homebrew Collection",
-    "console": "nes",
-    "kind": "bundle"
-  },
-  {
-    "id": "gameboy-homebrew",
-    "title": "Game Boy Homebrew",
-    "console": "gb",
     "kind": "bundle"
   }
 ]
