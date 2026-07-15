@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CatalogResponse, ItemDetailResponse } from "@rom-archive/contract";
+import type { CatalogResponse, ItemPageResponse } from "@rom-archive/contract";
 import type { ItemMetadataRecord } from "@/components/item-metadata";
 
 const params: { id: string } = { id: "gbahomebrew" };
@@ -15,7 +15,7 @@ const CATALOG: CatalogResponse = {
   entries: [{ id: "gbahomebrew", title: "GBA Homebrew", console: "gba", kind: "bundle" }],
 };
 
-const ITEM: ItemDetailResponse = {
+const ITEM: ItemPageResponse = {
   id: "gbahomebrew",
   console: "gba",
   files: [
@@ -26,6 +26,9 @@ const ITEM: ItemDetailResponse = {
       downloadUrl: "https://archive.org/download/gbahomebrew/Metroid%20Fusion.gba",
     },
   ],
+  total: 1,
+  page: 1,
+  pageSize: 60,
 };
 
 const META: ItemMetadataRecord = {

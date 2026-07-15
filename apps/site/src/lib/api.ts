@@ -1,4 +1,4 @@
-import type { CatalogResponse, ItemDetailResponse } from "@rom-archive/contract";
+import type { CatalogResponse, ItemPageResponse } from "@rom-archive/contract";
 
 /**
  * Base URL for the rom-archive API. Defaults to same-origin (`/api/...`), which
@@ -16,14 +16,27 @@ export async function fetchCatalog(signal?: AbortSignal): Promise<CatalogRespons
   return (await res.json()) as CatalogResponse;
 }
 
-/** GET one item's downloadable files (`?id=`). */
-export async function fetchItem(
+/**
+ * GET one page of an item's ROM files, with an optional name filter. Always
+ * passes pagination params, so the endpoint returns the paginated
+ * `ItemPageResponse` shape (bounded `files` plus `total`/`page`/`pageSize`) —
+ * used by the ROM list to browse bundles with thousands of ROMs without
+ * loading every row.
+ */
+export async function fetchItemPage(
   id: string,
+  opts: { page: number; pageSize: number; q?: string },
   signal?: AbortSignal,
-): Promise<ItemDetailResponse> {
-  const res = await fetch(`${API_BASE}/api/item?id=${encodeURIComponent(id)}`, { signal });
+): Promise<ItemPageResponse> {
+  const params = new URLSearchParams({
+    id,
+    page: String(opts.page),
+    pageSize: String(opts.pageSize),
+  });
+  if (opts.q) params.set("q", opts.q);
+  const res = await fetch(`${API_BASE}/api/item?${params.toString()}`, { signal });
   if (!res.ok) {
-    throw new Error(`item request failed: ${res.status}`);
+    throw new Error(`item page request failed: ${res.status}`);
   }
-  return (await res.json()) as ItemDetailResponse;
+  return (await res.json()) as ItemPageResponse;
 }
