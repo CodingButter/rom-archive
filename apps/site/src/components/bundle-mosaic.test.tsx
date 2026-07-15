@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ItemPageResponse, ItemDetailFile, Console } from "@rom-archive/contract";
@@ -19,15 +19,20 @@ function file(name: string): ItemDetailFile {
   };
 }
 
-function page(names: string[], console: Console = "nes"): ItemPageResponse {
-  return {
-    id: "No-Intro_NES",
-    console,
-    files: names.map(file),
-    total: names.length,
-    page: 1,
-    pageSize: 10,
-  };
+/** A response whose `total` may exceed the returned slice (models a big bundle). */
+function pageResponse(
+  names: string[],
+  total: number,
+  page: number,
+  pageSize: number,
+  console: Console = "nds",
+): ItemPageResponse {
+  return { id: "bundle", console, files: names.map(file), total, page, pageSize };
+}
+
+/** A fixed RNG so the spread walk is deterministic: identity order [1,2,3,...]. */
+function fixedRandom(): () => number {
+  return () => 0; // Fisher–Yates with random()=0 leaves the array in ascending order
 }
 
 afterEach(() => {
@@ -36,43 +41,62 @@ afterEach(() => {
 });
 
 describe("BundleMosaic", () => {
-  it("fetches page 1 with pageSize 10 and tiles up to 10 covers (12 files → 10 tiles)", async () => {
-    const names = Array.from({ length: 12 }, (_, i) => `Game ${i} (USA).zip`);
-    fetchItemPage.mockResolvedValue(page(names));
+  it("small bundle (total <= 10): a SINGLE fetchItemPage call, pageSize 10, no spread fetches", async () => {
+    fetchItemPage.mockResolvedValue(
+      pageResponse(["A (USA).zip", "B (USA).zip", "C (USA).zip"], 3, 1, 10, "nes"),
+    );
 
-    render(<BundleMosaic id="No-Intro_NES" console="nes" title="No-Intro NES" />);
+    render(<BundleMosaic id="small" console="nes" title="Small" />);
 
     await waitFor(() => {
       expect(screen.getByTestId("bundle-mosaic")).toBeInTheDocument();
     });
-    expect(screen.getAllByTestId("mosaic-tile")).toHaveLength(10);
-
-    // The fetch is page 1, pageSize 10 — no full-list load.
+    expect(fetchItemPage).toHaveBeenCalledTimes(1);
     expect(fetchItemPage).toHaveBeenCalledWith(
-      "No-Intro_NES",
+      "small",
       { page: 1, pageSize: 10 },
       expect.anything(),
     );
   });
 
-  it("tiles exactly the members of a small bundle (3 files → 3 tiles, no padding)", async () => {
-    fetchItemPage.mockResolvedValue(
-      page(["A (USA).zip", "B (USA).zip", "C (USA).zip"]),
+  it("large bundle: spreads over MULTIPLE DISTINCT pages (not the forced first-10 slice)", async () => {
+    // Probe reports a big total; each pageSize:1 fetch returns a distinct title.
+    fetchItemPage.mockImplementation(
+      async (_id: string, opts: { page: number; pageSize: number }) => {
+        if (opts.pageSize === 10) {
+          // Probe: only `total` is used from this in the spread path.
+          return pageResponse(["probe.7z"], 266, 1, 10);
+        }
+        return pageResponse([`Title ${opts.page} (USA).7z`], 266, opts.page, 1);
+      },
     );
 
-    render(<BundleMosaic id="x" console="nes" title="Small" />);
+    render(<BundleMosaic id="ds" console="nds" title="DS" random={fixedRandom()} />);
 
     await waitFor(() => {
-      expect(screen.getAllByTestId("mosaic-tile")).toHaveLength(3);
+      expect(screen.getByTestId("bundle-mosaic")).toBeInTheDocument();
     });
+
+    // Collect the page numbers of the pageSize:1 spread fetches.
+    const spreadPages = fetchItemPage.mock.calls
+      .filter((c) => (c[1] as { pageSize: number }).pageSize === 1)
+      .map((c) => (c[1] as { page: number }).page);
+
+    expect(spreadPages.length).toBeGreaterThan(1); // more than one page sampled
+    expect(new Set(spreadPages).size).toBe(spreadPages.length); // all DISTINCT
+    // The probe (pageSize:10) is page 1; the spread must not simply re-walk 1..10
+    // as its own forced slice — with total=266 the walk stops at 10 distinct tiles.
+    expect(spreadPages.length).toBeLessThanOrEqual(13); // MAX_FETCHES(14) − probe
   });
 
   it("makes no image-byte or /download/ fetch — composes from libretro links only", async () => {
     const globalFetch = vi.fn();
     vi.stubGlobal("fetch", globalFetch);
-    fetchItemPage.mockResolvedValue(page(["Metroid (USA).zip"]));
+    fetchItemPage.mockResolvedValue(
+      pageResponse(["Metroid (USA).zip"], 1, 1, 10, "nes"),
+    );
 
-    render(<BundleMosaic id="x" console="nes" title="No-Intro NES" />);
+    render(<BundleMosaic id="x" console="nes" title="NES" />);
 
     await waitFor(() => {
       expect(screen.getByTestId("bundle-mosaic")).toBeInTheDocument();
@@ -81,47 +105,97 @@ describe("BundleMosaic", () => {
     // The only data call is the mocked fetchItemPage; the component never calls
     // the global fetch (no image-byte proxying, no /download/ hit).
     expect(globalFetch).not.toHaveBeenCalled();
-    const derivedSrc = screen
-      .getAllByRole("img")
-      .map((el) => el.getAttribute("src"))
-      .filter((s): s is string => Boolean(s));
-    for (const src of derivedSrc) {
-      expect(src).not.toContain("/download/");
+  });
+
+  /**
+   * Install a mock 2D context so the draw effect runs (jsdom's getContext returns
+   * null, which the component guards by returning early — that also skips Image
+   * creation). Returns the spied Image instances and the mock ctx call records.
+   */
+  function withMockCanvas(): {
+    created: HTMLImageElement[];
+    ctx: Record<string, ReturnType<typeof vi.fn>>;
+  } {
+    const created: HTMLImageElement[] = [];
+    const RealImage = globalThis.Image;
+    class SpyImage extends RealImage {
+      constructor() {
+        super();
+        created.push(this);
+      }
+    }
+    vi.stubGlobal("Image", SpyImage);
+
+    const ctx = {
+      clearRect: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      drawImage: vi.fn(),
+      fillRect: vi.fn(),
+      setTransform: vi.fn(),
+    } as unknown as Record<string, ReturnType<typeof vi.fn>>;
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      ctx as unknown as CanvasRenderingContext2D,
+    );
+
+    return { created, ctx };
+  }
+
+  it("never sets crossOrigin on the Image objects it creates (libretro has no CORS)", async () => {
+    const { created } = withMockCanvas();
+    fetchItemPage.mockResolvedValue(
+      pageResponse(["A (USA).zip", "B (USA).zip"], 2, 1, 10, "nes"),
+    );
+
+    render(<BundleMosaic id="x" console="nes" title="NES" />);
+
+    await waitFor(() => {
+      expect(created.length).toBeGreaterThan(0);
+    });
+    for (const img of created) {
+      expect(img.crossOrigin).toBeFalsy();
     }
   });
 
-  it("derives tile URLs through coverUrlFor (a .zip member yields a non-null libretro src)", async () => {
-    fetchItemPage.mockResolvedValue(page(["Super Mario Bros. (World).zip"]));
-
-    render(<BundleMosaic id="x" console="nes" title="No-Intro NES" />);
-
-    const img = await screen.findByRole("img");
-    expect(img).toHaveAttribute(
-      "src",
-      "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/Super%20Mario%20Bros.%20(World).png",
+  it("draws a loaded cover and a placeholder for a failed one, each in a fixed slot", async () => {
+    const { created, ctx } = withMockCanvas();
+    fetchItemPage.mockResolvedValue(
+      pageResponse(["Loaded (USA).zip", "Broken (USA).zip"], 2, 1, 10, "nes"),
     );
-  });
 
-  it("renders a placeholder tile (not a gap or crash) for an absent/null-deriving cover", async () => {
-    // The `nes` archive derives a real URL, but simulate the libretro 404 collapse
-    // by forcing the <img> onError — the CoverImage placeholder must appear.
-    fetchItemPage.mockResolvedValue(page(["Obscure (Japan).zip"], "nes"));
-
-    render(<BundleMosaic id="x" console="nes" title="No-Intro NES" />);
-
-    const img = await screen.findByRole("img");
-    // Trigger the onError path (libretro lacks this dump).
-    fireEvent.error(img);
+    render(<BundleMosaic id="x" console="nes" title="NES" />);
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("img", { name: /No-Intro NES — Obscure \(Japan\)\.zip \(no cover art\)/ }),
-      ).toBeInTheDocument();
+      expect(created.length).toBe(2);
+    });
+
+    // Manually dispatch the outcomes jsdom never fires on its own.
+    (created[0] as unknown as { onload: () => void }).onload();
+    (created[1] as unknown as { onerror: () => void }).onerror();
+
+    await waitFor(() => {
+      expect(ctx.drawImage).toHaveBeenCalled(); // the loaded cover
+    });
+    expect(ctx.fillRect).toHaveBeenCalled(); // the placeholder cell for the failed one
+  });
+
+  it("does not throw when the 2D context is null (jsdom default) and still renders the canvas", async () => {
+    fetchItemPage.mockResolvedValue(
+      pageResponse(["A (USA).zip"], 1, 1, 10, "nes"),
+    );
+
+    render(<BundleMosaic id="x" console="nes" title="NES" />);
+
+    // jsdom getContext("2d") returns null; the guard must prevent any throw.
+    await waitFor(() => {
+      expect(screen.getByTestId("bundle-mosaic").tagName).toBe("CANVAS");
     });
   });
 
   it("renders nothing when the bundle has zero files", async () => {
-    fetchItemPage.mockResolvedValue(page([]));
+    fetchItemPage.mockResolvedValue(pageResponse([], 0, 1, 10, "nes"));
 
     const { container } = render(<BundleMosaic id="x" console="nes" title="Empty" />);
 
