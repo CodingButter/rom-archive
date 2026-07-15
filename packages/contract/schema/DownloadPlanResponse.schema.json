@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "excluded": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "insufficient-space",
+              "not-selected"
+            ],
+            "type": "string"
+          },
+          "sizeBytes": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "sizeBytes",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "files": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "downloadUrl": {
+            "format": "uri",
+            "type": "string"
+          },
+          "md5": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sizeBytes": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "targetPath": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "sizeBytes",
+          "md5",
+          "downloadUrl",
+          "targetPath"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "fits": {
+      "type": "boolean"
+    },
+    "freeSpaceBytes": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "totalBytes": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "fits",
+    "totalBytes",
+    "freeSpaceBytes",
+    "files"
+  ],
+  "type": "object"
+}

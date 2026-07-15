@@ -1,0 +1,27 @@
+{
+  "CatalogEntry": [
+    "approxSizeBytes",
+    "console",
+    "id",
+    "kind",
+    "title"
+  ],
+  "DownloadPlanRequest": [
+    "freeSpaceBytes",
+    "id",
+    "selectedFileNames"
+  ],
+  "DownloadPlanResponse": [
+    "excluded",
+    "files",
+    "fits",
+    "freeSpaceBytes",
+    "totalBytes"
+  ],
+  "ItemDetailFile": [
+    "downloadUrl",
+    "md5",
+    "name",
+    "sizeBytes"
+  ]
+}

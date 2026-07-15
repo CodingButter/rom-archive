@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "approxSizeBytes": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "console": {
+      "enum": [
+        "nds",
+        "gba",
+        "gb",
+        "gbc",
+        "snes",
+        "nes",
+        "gg",
+        "sms",
+        "md",
+        "pce"
+      ],
+      "type": "string"
+    },
+    "id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "bundle",
+        "single"
+      ],
+      "type": "string"
+    },
+    "title": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "console",
+    "kind"
+  ],
+  "type": "object"
+}

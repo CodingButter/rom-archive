@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "console": {
+      "enum": [
+        "nds",
+        "gba",
+        "gb",
+        "gbc",
+        "snes",
+        "nes",
+        "gg",
+        "sms",
+        "md",
+        "pce"
+      ],
+      "type": "string"
+    },
+    "files": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "downloadUrl": {
+            "format": "uri",
+            "type": "string"
+          },
+          "md5": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sizeBytes": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "sizeBytes",
+          "md5",
+          "downloadUrl"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "id": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "console",
+    "files"
+  ],
+  "type": "object"
+}
