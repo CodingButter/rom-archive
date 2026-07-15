@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Turborepo
+.turbo/
+
+# 3DS build artifacts
+*.cia
+*.3dsx
+*.elf
+*.smdh
+*.bin
+*.bnr
+# Spike-generated placeholder assets
+apps/3ds/spike/banner.png
+apps/3ds/spike/banner.wav
+
+# Vercel
+.vercel/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+
+# Plan / progress / amendments (run state, never committed)
+.mastracode/plans/rom-archive.md
+.mastracode/plans/rom-archive.progress.md
+.mastracode/plans/rom-archive.amendments.md
+.mastracode/plans/rom-archive.proof/

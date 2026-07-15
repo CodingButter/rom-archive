@@ -1,0 +1,24 @@
+# Minimal makerom RSF for the Phase-0 CIA toolchain spike.
+# Kept deliberately lean: makerom's `-desc app:4` supplies the AccessControlInfo
+# defaults, so this RSF only declares title metadata + the unique id. The
+# unique-id 0xFF3FF sits in the homebrew test range (title id 0004000000FF3FF00).
+BasicInfo:
+  Title                   : rom-archive-spike
+  CompanyCode             : "00"
+  ProductCode             : CTR-P-RASP
+  Logo                    : Homebrew
+
+TitleInfo:
+  Category                : Application
+  UniqueId                : 0xFF3FF
+
+Option:
+  UseOnSD                 : true
+  FreeProductCode         : true
+  MediaFootPadding        : false
+  EnableCompress          : true
+
+SystemControlInfo:
+  SaveDataSize            : 0K
+  RemasterVersion        : 0
+  StackSize              : 0x40000
