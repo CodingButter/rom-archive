@@ -71,6 +71,10 @@ if (!BASE) {
       expect(res.status).toBe(404);
     });
 
+    // `/item/x` is an unknown id on purpose: the item page is a client component
+    // that renders "Unknown item." at HTTP 200 rather than calling notFound().
+    // If the item page ever becomes a server component that 404s on a missing id,
+    // this assertion must change to match.
     it.each(["/", "/browse", "/item/x"])(
       "PAGE:200 — %s serves the Next app as HTML",
       async (path) => {
