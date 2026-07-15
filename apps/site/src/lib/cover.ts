@@ -20,7 +20,13 @@ const LIBRETRO_SYSTEM: Readonly<Record<Console, string | null>> = {
   pce: "NEC - PC Engine - TurboGrafx 16",
 };
 
-/** Extensions that are archives, not single playable ROMs — no cover derived. */
+/**
+ * Extensions that are per-game archives in the full-set catalog. No-Intro stores
+ * every ROM as `<Title> (Region).zip` (NES/SNES/Genesis/PCE) or `.7z`
+ * (GBA/GB/GBC/GG/SMS/DS) — a SINGLE archive extension over the exact inner ROM
+ * title. The stem after stripping that one extension IS libretro's Named_Boxarts
+ * name, so we derive covers for these instead of returning null.
+ */
 const ARCHIVE_EXTENSIONS = new Set(["zip", "7z"]);
 
 /** Libretro replaces these filename-illegal characters with `_` in thumbnail names. */
@@ -39,16 +45,40 @@ function stripExtension(name: string): string {
 }
 
 /**
+ * Remove a SINGLE trailing archive extension (`.zip`/`.7z`, case-insensitive)
+ * from a filename, or return it unchanged when there is none. Unlike
+ * {@link stripExtension} this cuts only the anchored archive suffix, so inner
+ * titles with dots survive: `"Super Mario Bros. (World).zip"` →
+ * `"Super Mario Bros. (World)"` (NOT `"Super Mario Bros"`), and
+ * `"Game.v1.2.zip"` → `"Game.v1.2"`.
+ */
+export function stripArchiveExtension(name: string): string {
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return name;
+  const ext = name.slice(dot + 1).toLowerCase();
+  return ARCHIVE_EXTENSIONS.has(ext) ? name.slice(0, dot) : name;
+}
+
+/**
  * Derive the libretro Named_Boxarts thumbnail URL for a ROM filename, or null
- * when the console has no libretro system or the file is an archive. The URL is
- * NOT verified to exist; render with an onError fallback.
+ * when the console has no libretro system. Per-game archive names (`.zip`/`.7z`,
+ * the full-set catalog's storage format) have their single archive extension
+ * stripped — the remaining stem IS the inner No-Intro title, which is exactly
+ * libretro's thumbnail name — so covers derive for them too. The URL is NOT
+ * verified to exist; render with an onError fallback.
  */
 export function coverUrlFor(console: Console, romFileName: string): string | null {
   const system = LIBRETRO_SYSTEM[console] ?? null;
   if (system === null) return null;
-  if (ARCHIVE_EXTENSIONS.has(extensionOf(romFileName))) return null;
 
-  const title = stripExtension(romFileName).replace(LIBRETRO_ILLEGAL, "_");
+  // Branch: for archive names the stem IS the full inner title — strip only the
+  // archive extension, never a second time (stripExtension would cut a dot
+  // inside the title, e.g. `Super Mario Bros.` → `Super Mario Bros`).
+  const isArchive = ARCHIVE_EXTENSIONS.has(extensionOf(romFileName));
+  const stem = isArchive
+    ? stripArchiveExtension(romFileName)
+    : stripExtension(romFileName);
+  const title = stem.replace(LIBRETRO_ILLEGAL, "_");
   const encodedSystem = encodeURIComponent(system);
   const encodedName = encodeURIComponent(`${title}.png`);
   return `${THUMBNAILS_BASE}/${encodedSystem}/Named_Boxarts/${encodedName}`;
