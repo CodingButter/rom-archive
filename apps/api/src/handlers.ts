@@ -9,6 +9,9 @@ import {
 
 import { ArchiveError, fetchItemMetadata, type FetchLike } from "./archiveClient.js";
 import { findCatalogEntry, loadCatalog } from "./catalog.js";
+import { unknownMetadata, type GameMetadata } from "./metadata.js";
+import { resolveMetadata, type MetadataCache } from "./metadataService.js";
+import { loadTgdbGenres } from "./tgdbGenres.js";
 import { buildDownloadPlan } from "./plan.js";
 
 /**
@@ -55,6 +58,52 @@ export async function handleItem(
       return { status: 502, body: { error: "archive.org metadata request failed" } };
     }
     throw err;
+  }
+}
+
+/** Injected dependencies for the metadata handler. */
+export interface MetadataDeps {
+  cache: MetadataCache;
+  fetchImpl: FetchLike;
+  env: { TGDB_API_KEY?: string | undefined };
+}
+
+/**
+ * GET game metadata for a catalog item (`?id=` + `?name=`). Derives the console
+ * from the catalog id (400 missing id/name, 404 unknown id — same rules as
+ * handlePlan) and resolves metadata via the budget-aware service.
+ *
+ * NEVER throws to the caller on an upstream failure: a broken metadata source
+ * must not break the page, so the worst case is a graceful `unknown` record with
+ * a 200. Only routing errors (missing/unknown id) produce non-200s.
+ */
+export async function handleMetadata(
+  id: string | undefined,
+  name: string | undefined,
+  deps: MetadataDeps,
+): Promise<HandlerResult<GameMetadata | ErrorBody>> {
+  if (!id) {
+    return { status: 400, body: { error: "missing required query parameter: id" } };
+  }
+  if (!name) {
+    return { status: 400, body: { error: "missing required query parameter: name" } };
+  }
+  const entry = findCatalogEntry(id);
+  if (!entry) {
+    return { status: 404, body: { error: `unknown catalog id: ${id}` } };
+  }
+  try {
+    const meta = await resolveMetadata(entry.console, name, {
+      cache: deps.cache,
+      fetchImpl: deps.fetchImpl,
+      env: deps.env,
+      lookups: { genres: loadTgdbGenres() },
+    });
+    return { status: 200, body: meta };
+  } catch {
+    // Absolute floor: even an unexpected error yields a graceful unknown record,
+    // never a 5xx — the page always renders.
+    return { status: 200, body: unknownMetadata(entry.console, name) };
   }
 }
 

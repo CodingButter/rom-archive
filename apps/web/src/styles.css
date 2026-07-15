@@ -60,3 +60,44 @@ code {
 a {
   color: #74a8ff;
 }
+
+.metadata-panel {
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.75rem;
+}
+
+.metadata-boxart {
+  max-width: 12rem;
+  border-radius: 0.5rem;
+  float: right;
+  margin: 0 0 1rem 1rem;
+}
+
+.metadata-title {
+  margin-top: 0;
+}
+
+.metadata-fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0.5rem 0;
+}
+
+.metadata-fields dt {
+  font-weight: 600;
+  color: #9fb4d8;
+}
+
+.metadata-fields dd {
+  margin: 0;
+}
+
+.metadata-empty,
+.metadata-status {
+  color: #8a94a6;
+  font-style: italic;
+}

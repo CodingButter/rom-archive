@@ -9,11 +9,22 @@ import {
   ItemDetailResponseSchema,
 } from "@rom-archive/contract";
 import type { FetchLike } from "../src/archiveClient.js";
-import { handleCatalog, handleItem, handlePlan } from "../src/handlers.js";
+import {
+  handleCatalog,
+  handleItem,
+  handleMetadata,
+  handlePlan,
+} from "../src/handlers.js";
+import type { GameMetadata } from "../src/metadata.js";
+import { InMemoryCache } from "../src/metadataService.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
+const fixturesDir = join(here, "..", "src", "fixtures");
 const realMetadata = JSON.parse(
-  readFileSync(join(here, "..", "src", "fixtures", "gbahomebrew.metadata.json"), "utf8"),
+  readFileSync(join(fixturesDir, "gbahomebrew.metadata.json"), "utf8"),
+) as unknown;
+const tgdbByGame = JSON.parse(
+  readFileSync(join(fixturesDir, "tgdb.bygame.metroidfusion.json"), "utf8"),
 ) as unknown;
 
 /**
@@ -111,5 +122,70 @@ describe("handlePlan", () => {
     const fetch: FetchLike = async () => ({ ok: false, status: 503, json: async () => ({}) });
     const { status } = await handlePlan(validReq, fetch);
     expect(status).toBe(502);
+  });
+});
+
+describe("handleMetadata", () => {
+  const okTgdbFetch: FetchLike = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => tgdbByGame,
+  });
+
+  it("returns 200 with TGDB-sourced metadata for a known item", async () => {
+    const { status, body } = await handleMetadata("gbahomebrew", "Metroid Fusion.gba", {
+      cache: new InMemoryCache(),
+      fetchImpl: okTgdbFetch,
+      env: { TGDB_API_KEY: "test-key" },
+    });
+    expect(status).toBe(200);
+    const meta = body as GameMetadata;
+    expect(meta.source).toBe("tgdb");
+    expect(meta.title).toBe("Metroid Fusion");
+    expect(meta.platform).toBe("gba");
+    expect(meta.genres).toContain("Action");
+  });
+
+  it("400s on a missing id", async () => {
+    const { status } = await handleMetadata(undefined, "Metroid Fusion.gba", {
+      cache: new InMemoryCache(),
+      fetchImpl: okTgdbFetch,
+      env: {},
+    });
+    expect(status).toBe(400);
+  });
+
+  it("400s on a missing name", async () => {
+    const { status } = await handleMetadata("gbahomebrew", undefined, {
+      cache: new InMemoryCache(),
+      fetchImpl: okTgdbFetch,
+      env: {},
+    });
+    expect(status).toBe(400);
+  });
+
+  it("404s on an unknown catalog id", async () => {
+    const { status } = await handleMetadata("not-in-catalog", "Whatever.gba", {
+      cache: new InMemoryCache(),
+      fetchImpl: okTgdbFetch,
+      env: { TGDB_API_KEY: "test-key" },
+    });
+    expect(status).toBe(404);
+  });
+
+  it("degrades to a graceful 200 (never 5xx) when the upstream fetch throws", async () => {
+    const throwingFetch: FetchLike = async () => {
+      throw new Error("network down");
+    };
+    const { status, body } = await handleMetadata("gbahomebrew", "Metroid Fusion.gba", {
+      cache: new InMemoryCache(),
+      fetchImpl: throwingFetch,
+      env: { TGDB_API_KEY: "test-key" },
+    });
+    expect(status).toBe(200);
+    const meta = body as GameMetadata;
+    // A thrown (non-MetadataError) error must still yield a usable record.
+    expect(["libretro", "unknown"]).toContain(meta.source);
+    expect(meta.title).toBe("Metroid Fusion");
   });
 });
