@@ -19,7 +19,7 @@ export function CoverImage({
   if (url === null || failed) {
     return (
       <div
-        className="bg-muted text-muted-foreground flex aspect-[3/4] w-full items-center justify-center rounded-md text-2xl"
+        className="from-muted to-card text-muted-foreground/60 flex aspect-[3/4] w-full items-center justify-center rounded-md bg-gradient-to-br text-2xl"
         role="img"
         aria-label={`${alt} (no cover art)`}
       >

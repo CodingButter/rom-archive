@@ -2,8 +2,12 @@
 
 import { useEffect, useState } from "react";
 
+import { Info } from "lucide-react";
+
 import { API_BASE } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /**
  * The metadata record returned by the `/api/metadata` endpoint. This is the wire
@@ -70,8 +74,14 @@ export function ItemMetadata({
   if (state.status === "loading") {
     return (
       <Card data-testid="metadata-panel">
-        <CardContent>
-          <p className="text-muted-foreground">Loading metadata…</p>
+        <CardContent className="flex flex-col gap-5 sm:flex-row">
+          <Skeleton className="h-52 w-40 shrink-0 rounded-lg" />
+          <div className="flex flex-1 flex-col gap-3">
+            <Skeleton className="h-7 w-1/2" />
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-4 w-1/2" />
+          </div>
         </CardContent>
       </Card>
     );
@@ -81,8 +91,9 @@ export function ItemMetadata({
   // empty state — the page always renders.
   if (state.status === "error" || state.meta.source === "unknown") {
     return (
-      <Card data-testid="metadata-panel">
-        <CardContent>
+      <Card data-testid="metadata-panel" className="border-dashed">
+        <CardContent className="flex items-center gap-3">
+          <Info className="text-muted-foreground h-5 w-5 shrink-0" />
           <p className="text-muted-foreground" data-testid="metadata-empty">
             No metadata available for this title.
           </p>
@@ -93,18 +104,23 @@ export function ItemMetadata({
 
   const meta = state.meta;
   return (
-    <Card data-testid="metadata-panel">
-      <CardContent className="flex flex-col gap-4 sm:flex-row">
+    <Card data-testid="metadata-panel" className="overflow-hidden">
+      <CardContent className="flex flex-col gap-5 sm:flex-row">
         {meta.boxartUrl ? (
           <img
-            className="w-40 shrink-0 rounded-md object-cover"
+            className="ring-border w-40 shrink-0 self-start rounded-lg object-cover shadow-sm ring-1"
             src={meta.boxartUrl}
             alt={`${meta.title} box art`}
           />
         ) : null}
         <div className="flex flex-col gap-3">
-          <h2 className="text-2xl font-semibold tracking-tight">{meta.title}</h2>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-2xl font-semibold tracking-tight">{meta.title}</h2>
+            <Badge variant="outline" className="uppercase">
+              {meta.source}
+            </Badge>
+          </div>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
             <dt className="text-muted-foreground">Platform</dt>
             <dd>{meta.platform}</dd>
             {meta.releaseDate ? (

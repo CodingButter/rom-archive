@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight, Search, Send } from "lucide-react";
 import type { Console, ItemDetailFile } from "@rom-archive/contract";
 
 import { fetchItemPage } from "@/lib/api";
@@ -43,27 +44,36 @@ function RomRow({
 
   return (
     <li
-      className="bg-card flex flex-col gap-3 rounded-lg border p-3"
+      className="group bg-card hover:border-primary/40 flex flex-col gap-3 rounded-xl border p-3 transition-colors"
       data-testid="rom-row"
     >
-      <div className="w-full max-w-28">
+      <div className="w-full max-w-28 overflow-hidden rounded-md">
         <CoverImage url={coverUrl} alt={file.name} />
       </div>
       <div className="flex flex-col gap-2">
         <p className="text-sm font-medium break-all">{file.name}</p>
-        <p className="text-muted-foreground text-xs">{formatBytes(file.sizeBytes)}</p>
+        <p className="text-muted-foreground font-mono text-xs">
+          {formatBytes(file.sizeBytes)}
+        </p>
         <Button
           type="button"
-          variant="secondary"
+          variant={showQr ? "outline" : "secondary"}
           size="sm"
-          className="w-fit"
+          className="w-fit gap-1.5"
           aria-expanded={showQr}
           onClick={() => setShowQr((v) => !v)}
         >
-          {showQr ? "Hide QR" : "Send to 3DS"}
+          {showQr ? (
+            "Hide QR"
+          ) : (
+            <>
+              <Send className="h-3.5 w-3.5" />
+              Send to 3DS
+            </>
+          )}
         </Button>
         {showQr ? (
-          <div className="flex flex-col items-start gap-1">
+          <div className="bg-background flex flex-col items-start gap-1 rounded-lg border p-3">
             <QrCode value={scanPointerValue(id, file.name)} size={180} />
             <p className="text-muted-foreground text-xs">
               Scan with the ROM Archive 3DS app.
@@ -129,17 +139,20 @@ export function RomList({ id }: { id: string }): React.JSX.Element {
   return (
     <section className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-semibold">
+        <h2 className="text-xl font-semibold tracking-tight">
           ROMs{state.status === "ready" ? ` (${state.total})` : ""}
         </h2>
-        <input
-          type="search"
-          value={rawQuery}
-          onChange={(e) => setRawQuery(e.target.value)}
-          placeholder="Search ROMs by name…"
-          aria-label="Search ROMs by name"
-          className="border-input bg-background w-full max-w-xs rounded-md border px-3 py-2 text-sm"
-        />
+        <div className="relative w-full max-w-xs">
+          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+          <input
+            type="search"
+            value={rawQuery}
+            onChange={(e) => setRawQuery(e.target.value)}
+            placeholder="Search ROMs by name…"
+            aria-label="Search ROMs by name"
+            className="border-input bg-background focus-visible:ring-ring/50 w-full rounded-md border py-2 pr-3 pl-9 text-sm outline-none focus-visible:ring-2"
+          />
+        </div>
       </div>
 
       {state.status === "loading" ? (
@@ -162,27 +175,34 @@ export function RomList({ id }: { id: string }): React.JSX.Element {
           </ul>
 
           {totalPages > 1 ? (
-            <div className="flex items-center justify-center gap-4" data-testid="pager">
+            <div
+              className="flex items-center justify-center gap-3"
+              data-testid="pager"
+            >
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
+                className="gap-1"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
+                <ChevronLeft className="h-4 w-4" />
                 Previous
               </Button>
-              <span className="text-muted-foreground text-sm">
+              <span className="text-muted-foreground min-w-28 text-center text-sm tabular-nums">
                 Page {page} of {totalPages}
               </span>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
+                className="gap-1"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               >
                 Next
+                <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           ) : null}
