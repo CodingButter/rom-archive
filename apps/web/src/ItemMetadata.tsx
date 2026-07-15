@@ -1,11 +1,6 @@
 import { useEffect, useState } from "react";
 
-/**
- * Base URL for the rom-archive API. Defaults to same-origin (`/api/...`), which
- * is how the SPA and its Vercel functions are deployed together. Override with
- * `VITE_API_BASE` when the API is hosted elsewhere.
- */
-const API_BASE: string = import.meta.env.VITE_API_BASE ?? "";
+import { API_BASE } from "./api";
 
 /**
  * The metadata record returned by the `/api/metadata` endpoint. This is the wire

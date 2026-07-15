@@ -101,3 +101,101 @@ a {
   color: #8a94a6;
   font-style: italic;
 }
+
+.catalog-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+}
+
+.catalog-list li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.catalog-kind {
+  color: #8a94a6;
+  font-size: 0.85em;
+}
+
+.send-all {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.rom-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.rom-row {
+  display: flex;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.75rem;
+}
+
+.cover {
+  width: 5rem;
+  height: 5rem;
+  object-fit: contain;
+  border-radius: 0.4rem;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.cover-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 1.75rem;
+}
+
+.rom-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.rom-name {
+  margin: 0;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.rom-size {
+  margin: 0.15rem 0 0.5rem;
+  color: #8a94a6;
+  font-size: 0.85em;
+}
+
+.rom-send {
+  background: #2d63c8;
+  color: #fff;
+  border: none;
+  padding: 0.4rem 0.9rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+
+.rom-send:hover {
+  background: #3a72d8;
+}
+
+.rom-qr {
+  margin-top: 0.75rem;
+}
+
+.rom-qr-hint {
+  color: #8a94a6;
+  font-size: 0.85em;
+  margin-top: 0.5rem;
+}

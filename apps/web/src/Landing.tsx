@@ -11,6 +11,9 @@ export function Landing(): React.JSX.Element {
           A Nintendo 3DS homebrew app that downloads public-domain ROMs from
           archive.org straight into your TWiLight Menu++ folders.
         </p>
+        <p>
+          <Link to="/browse">Browse the ROM catalog →</Link>
+        </p>
       </header>
 
       <section>
