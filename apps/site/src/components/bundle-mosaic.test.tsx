@@ -103,8 +103,8 @@ describe("BundleMosaic", () => {
   });
 
   it("renders a placeholder tile (not a gap or crash) for an absent/null-deriving cover", async () => {
-    // `pce` archive derives a real URL, but simulate the libretro 404 collapse by
-    // forcing the <img> onError — the CoverImage placeholder must appear.
+    // The `nes` archive derives a real URL, but simulate the libretro 404 collapse
+    // by forcing the <img> onError — the CoverImage placeholder must appear.
     fetchItemPage.mockResolvedValue(page(["Obscure (Japan).zip"], "nes"));
 
     render(<BundleMosaic id="x" console="nes" title="No-Intro NES" />);
@@ -124,6 +124,17 @@ describe("BundleMosaic", () => {
     fetchItemPage.mockResolvedValue(page([]));
 
     const { container } = render(<BundleMosaic id="x" console="nes" title="Empty" />);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("bundle-mosaic")).not.toBeInTheDocument();
+    });
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("renders nothing when the item fetch rejects (never crashes the page)", async () => {
+    fetchItemPage.mockRejectedValue(new Error("upstream 502"));
+
+    const { container } = render(<BundleMosaic id="x" console="nes" title="Broken" />);
 
     await waitFor(() => {
       expect(screen.queryByTestId("bundle-mosaic")).not.toBeInTheDocument();

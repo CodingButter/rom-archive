@@ -50,7 +50,7 @@ export function BundleMosaic({
         setState({ status: "empty" });
       });
     return () => controller.abort();
-  }, [id]);
+  }, [id, console, title]);
 
   if (state.status === "empty") return null;
 
