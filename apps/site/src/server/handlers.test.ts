@@ -7,6 +7,7 @@ import {
   CatalogResponseSchema,
   DownloadPlanResponseSchema,
   ItemDetailResponseSchema,
+  ItemPageResponseSchema,
 } from "@rom-archive/contract";
 import type { FetchLike } from "./archiveClient";
 import {
@@ -84,6 +85,60 @@ describe("handleItem", () => {
     const { status, body } = await handleItem("gbahomebrew", fetch);
     expect(status).toBe(502);
     expect(body).toHaveProperty("error");
+  });
+
+  it("with NO pagination params returns the byte-identical full-list shape", async () => {
+    // This pins the backward-compatibility invariant the 3DS resolve/plan
+    // pipeline depends on: absent params ⇒ exactly { id, console, files } with
+    // no total/page/pageSize keys and every file present.
+    const { fetch } = metadataOnlyFetch(realMetadata);
+    const { status, body } = await handleItem("gbahomebrew", fetch);
+    expect(status).toBe(200);
+    const parsed = ItemDetailResponseSchema.parse(body);
+    expect(Object.keys(parsed).sort()).toEqual(["console", "files", "id"]);
+    expect(body).not.toHaveProperty("total");
+    expect(body).not.toHaveProperty("page");
+    expect(body).not.toHaveProperty("pageSize");
+    // full flat list: the fixture has 10 md5-bearing ROM files
+    expect((body as { files: unknown[] }).files).toHaveLength(10);
+  });
+
+  it("passing an empty pagination object leaves the full-list shape unchanged", async () => {
+    const { fetch } = metadataOnlyFetch(realMetadata);
+    const { body } = await handleItem("gbahomebrew", fetch, {});
+    expect(ItemDetailResponseSchema.safeParse(body).success).toBe(true);
+    expect(body).not.toHaveProperty("total");
+  });
+
+  it("with pagination params returns a bounded page plus a correct total", async () => {
+    const { fetch, calls } = metadataOnlyFetch(realMetadata);
+    const { status, body } = await handleItem("gbahomebrew", fetch, {
+      page: 1,
+      pageSize: 4,
+    });
+    expect(status).toBe(200);
+    const parsed = ItemPageResponseSchema.parse(body);
+    expect(parsed.files).toHaveLength(4);
+    expect(parsed.total).toBe(10);
+    expect(parsed.page).toBe(1);
+    expect(parsed.pageSize).toBe(4);
+    // still bytes-never-proxied
+    expect(calls.some((u) => u.includes("/download/"))).toBe(false);
+  });
+
+  it("with a name filter returns only matching files and the filtered total", async () => {
+    const { fetch } = metadataOnlyFetch(realMetadata);
+    const { body } = await handleItem("gbahomebrew", fetch, { q: "europe" });
+    const parsed = ItemPageResponseSchema.parse(body);
+    expect(parsed.total).toBeGreaterThan(0);
+    expect(parsed.files.every((f) => f.name.toLowerCase().includes("europe"))).toBe(true);
+  });
+
+  it("404s on an unknown id even with pagination params (no upstream fetch)", async () => {
+    const { fetch, calls } = metadataOnlyFetch(realMetadata);
+    const { status } = await handleItem("not-in-catalog", fetch, { page: 1 });
+    expect(status).toBe(404);
+    expect(calls).toHaveLength(0);
   });
 });
 

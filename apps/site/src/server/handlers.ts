@@ -2,12 +2,15 @@ import {
   CatalogResponseSchema,
   DownloadPlanRequestSchema,
   ItemDetailResponseSchema,
+  ItemPageResponseSchema,
   type CatalogResponse,
   type DownloadPlanResponse,
   type ItemDetailResponse,
+  type ItemPageResponse,
 } from "@rom-archive/contract";
 
 import { ArchiveError, fetchItemMetadata, type FetchLike } from "./archiveClient";
+import { paginateFiles, type PaginateOptions } from "./paginate";
 import { findCatalogEntry, loadCatalog } from "./catalog";
 import { unknownMetadata, type GameMetadata } from "./metadata";
 import { resolveMetadata, type MetadataCache } from "./metadataService";
@@ -37,11 +40,21 @@ export function handleCatalog(): HandlerResult<CatalogResponse | ErrorBody> {
   return { status: 200, body: CatalogResponseSchema.parse(body) };
 }
 
-/** GET item detail (`?id=`) → the item's downloadable files from archive.org. */
+/**
+ * GET item detail (`?id=`) → the item's downloadable files from archive.org.
+ *
+ * Pagination is ADDITIVE and opt-in: when `pagination` is omitted (or has no
+ * page/pageSize/q set), the response is the full flat `ItemDetailResponse` — the
+ * exact shape the 3DS resolve/plan pipeline depends on, byte-for-byte unchanged.
+ * When any pagination field is present, the response is a bounded
+ * `ItemPageResponse` (one page + `total`/`page`/`pageSize`) so a browser never
+ * holds a 5,000-row bundle at once.
+ */
 export async function handleItem(
   id: string | undefined,
   fetchImpl: FetchLike,
-): Promise<HandlerResult<ItemDetailResponse | ErrorBody>> {
+  pagination?: PaginateOptions,
+): Promise<HandlerResult<ItemDetailResponse | ItemPageResponse | ErrorBody>> {
   if (!id) {
     return { status: 400, body: { error: "missing required query parameter: id" } };
   }
@@ -51,6 +64,18 @@ export async function handleItem(
   }
   try {
     const files = await fetchItemMetadata(id, fetchImpl);
+    if (isPaginated(pagination)) {
+      const paged = paginateFiles(files, pagination);
+      const body: ItemPageResponse = {
+        id,
+        console: entry.console,
+        files: paged.files,
+        total: paged.total,
+        page: paged.page,
+        pageSize: paged.pageSize,
+      };
+      return { status: 200, body: ItemPageResponseSchema.parse(body) };
+    }
     const body: ItemDetailResponse = { id, console: entry.console, files };
     return { status: 200, body: ItemDetailResponseSchema.parse(body) };
   } catch (err) {
@@ -59,6 +84,14 @@ export async function handleItem(
     }
     throw err;
   }
+}
+
+/** True when the caller opted into pagination via any of page/pageSize/q. */
+function isPaginated(p: PaginateOptions | undefined): p is PaginateOptions {
+  return (
+    p !== undefined &&
+    (p.page !== undefined || p.pageSize !== undefined || p.q !== undefined)
+  );
 }
 
 /** Injected dependencies for the metadata handler. */

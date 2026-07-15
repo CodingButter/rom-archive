@@ -7,6 +7,7 @@ import {
   CatalogResponseSchema,
   DownloadPlanResponseSchema,
   ItemDetailResponseSchema,
+  ItemPageResponseSchema,
 } from "@rom-archive/contract";
 
 import type { GameMetadata } from "@/server/metadata";
@@ -89,6 +90,39 @@ describe("GET /api/item", () => {
     const res = await GET(new Request("http://t/api/item?id=gbahomebrew"));
     expect(res.status).toBe(502);
     expect(await res.json()).toHaveProperty("error");
+  });
+
+  it("with no pagination params returns the full-list shape (no paging keys)", async () => {
+    stubFetch(realMetadata);
+    const { GET } = await import("./item/route");
+    const res = await GET(new Request("http://t/api/item?id=gbahomebrew"));
+    const body = await res.json();
+    expect(ItemDetailResponseSchema.safeParse(body).success).toBe(true);
+    expect(body).not.toHaveProperty("total");
+    expect(body).not.toHaveProperty("page");
+  });
+
+  it("forwards page/pageSize and returns a bounded paginated response", async () => {
+    stubFetch(realMetadata);
+    const { GET } = await import("./item/route");
+    const res = await GET(
+      new Request("http://t/api/item?id=gbahomebrew&page=1&pageSize=3"),
+    );
+    expect(res.status).toBe(200);
+    const parsed = ItemPageResponseSchema.parse(await res.json());
+    expect(parsed.files).toHaveLength(3);
+    expect(parsed.total).toBe(10);
+    expect(parsed.page).toBe(1);
+    expect(parsed.pageSize).toBe(3);
+  });
+
+  it("forwards q and returns only matching files", async () => {
+    stubFetch(realMetadata);
+    const { GET } = await import("./item/route");
+    const res = await GET(new Request("http://t/api/item?id=gbahomebrew&q=usa"));
+    const parsed = ItemPageResponseSchema.parse(await res.json());
+    expect(parsed.total).toBeGreaterThan(0);
+    expect(parsed.files.every((f) => f.name.toLowerCase().includes("usa"))).toBe(true);
   });
 });
 

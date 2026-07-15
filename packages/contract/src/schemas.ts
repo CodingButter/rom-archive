@@ -46,6 +46,22 @@ export const ItemDetailResponseSchema = z.object({
 export type ItemDetailResponse = z.infer<typeof ItemDetailResponseSchema>;
 
 /**
+ * A single page of an item's ROM files, for browsing bundles with thousands of
+ * ROMs. It is the item-detail shape (`id`, `console`, `files`) plus paging
+ * metadata: `files` is one bounded page, `total` is the count of files matching
+ * the optional name filter across the whole item, and `page`/`pageSize` echo the
+ * request. This is a server→browser response only; it is NOT a QR/3DS wire type,
+ * so it is deliberately not part of the generated C++ mirror set. It is additive:
+ * the default (unpaginated) `/api/item` response stays `ItemDetailResponse`.
+ */
+export const ItemPageResponseSchema = ItemDetailResponseSchema.extend({
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type ItemPageResponse = z.infer<typeof ItemPageResponseSchema>;
+
+/**
  * The console asks the server to plan a download: which item, which files
  * (default: all), and how much SD space is free so the server does the fit math.
  * Strict: this is a system boundary (untrusted client input), so unknown keys
