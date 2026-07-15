@@ -8,6 +8,7 @@ import type { CatalogEntry } from "@rom-archive/contract";
 
 import { fetchCatalog } from "@/lib/api";
 import { scanPointerValue } from "@/lib/cover";
+import { BundleMosaic } from "@/components/bundle-mosaic";
 import { ItemMetadata } from "@/components/item-metadata";
 import { QrCode } from "@/components/qr-code";
 import { RomList } from "@/components/rom-list";
@@ -91,6 +92,10 @@ export default function ItemPage(): React.JSX.Element {
         </Card>
       ) : (
         <>
+          {entry ? (
+            <BundleMosaic id={id} console={entry.console} title={title} />
+          ) : null}
+
           <ItemMetadata id={id} name={title} />
 
           <Card
