@@ -58,10 +58,12 @@ export function ItemMetadata({
   name: string;
 }): React.JSX.Element {
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [boxartFailed, setBoxartFailed] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
     setState({ status: "loading" });
+    setBoxartFailed(false);
     fetchMetadata(id, name, controller.signal)
       .then((meta) => setState({ status: "ready", meta }))
       .catch((err: unknown) => {
@@ -106,11 +108,12 @@ export function ItemMetadata({
   return (
     <Card data-testid="metadata-panel" className="overflow-hidden">
       <CardContent className="flex flex-col gap-5 sm:flex-row">
-        {meta.boxartUrl ? (
+        {meta.boxartUrl && !boxartFailed ? (
           <img
             className="ring-border w-40 shrink-0 self-start rounded-lg object-cover shadow-sm ring-1"
             src={meta.boxartUrl}
             alt={`${meta.title} box art`}
+            onError={() => setBoxartFailed(true)}
           />
         ) : null}
         <div className="flex flex-col gap-3">
