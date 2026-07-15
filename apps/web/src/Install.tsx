@@ -2,9 +2,15 @@ import { Link } from "react-router-dom";
 
 import { QrCode } from "./QrCode";
 
-/** The hosted `.cia` URL FBI will download, from build-time env with a default. */
+/**
+ * The `.cia` URL FBI downloads. Defaults to the GitHub Releases "latest"
+ * link, which permanently redirects to the newest published `rom-archive.cia`
+ * asset — the QR never changes as new releases ship. Override with
+ * `VITE_CIA_URL` if hosting the CIA elsewhere.
+ */
 export const CIA_URL: string =
-  import.meta.env.VITE_CIA_URL ?? "https://rom-archive.example/rom-archive.cia";
+  import.meta.env.VITE_CIA_URL ??
+  "https://github.com/CodingButter/rom-archive/releases/latest/download/rom-archive.cia";
 
 export function Install(): React.JSX.Element {
   return (
