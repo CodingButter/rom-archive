@@ -1,6 +1,0 @@
-.vercel
-
-# Local env files — never commit real secrets. `.env.example` is the tracked template.
-.env
-.env.*
-!.env.example

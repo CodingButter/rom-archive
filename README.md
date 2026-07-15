@@ -16,8 +16,7 @@ This is a monorepo that ships three cooperating pieces:
 | Path | What it is |
 | --- | --- |
 | `apps/3ds` | The on-device app, packaged as an installable `.cia`. A C++ program with a host-testable, console-agnostic core (`apps/3ds/core`) and a thin libctru platform layer (`apps/3ds/source`). |
-| `apps/api` | A stateless Vercel serverless API that reads archive.org's public Metadata API and returns catalog / item / download-plan JSON. It **brokers links and never proxies ROM bytes.** |
-| `apps/web` | A landing page and QR-install page (Vite + React) that serves the `.cia` for install via FBI. |
+| `apps/site` | A single Next.js App Router app (TypeScript, Tailwind v4, shadcn/ui). It serves the browse catalog, ROM-detail pages, and the QR-install page, and hosts the stateless API as same-origin route handlers under `/api/*` that read archive.org's public Metadata API and return catalog / item / download-plan / metadata JSON. It **brokers links and never proxies ROM bytes.** |
 
 A shared contract package (`packages/contract`, zod + generated JSON Schema) is
 the single source of truth for the wire format. The C++ structs mirror it by
@@ -28,9 +27,10 @@ that fails the build if the mirror and the schema disagree.
 
 ```
   ┌──────────┐   catalog / item / plan JSON    ┌─────────────┐
-  │  3DS app │ ──────────────────────────────► │  apps/api   │
-  │ (.cia)   │ ◄────────────────────────────── │  (Vercel)   │
-  └────┬─────┘   (free space in, plan out)      └──────┬──────┘
+  │  3DS app │ ──────────────────────────────► │  apps/site  │
+  │ (.cia)   │ ◄────────────────────────────── │  /api/* on  │
+  └────┬─────┘   (free space in, plan out)      │   Vercel    │
+       │                                        └──────┬──────┘
        │                                               │  metadata only
        │  direct ROM download (streamed,               ▼
        │  MD5-verified, never via the API)      ┌─────────────┐
@@ -49,7 +49,8 @@ it.
 
 ## Install flow (on hardware)
 
-1. Deploy `apps/api` and `apps/web`, and host the built `.cia`.
+1. Deploy `apps/site` (one Vercel project serving the pages and `/api/*`), and
+   host the built `.cia`.
 2. On the 3DS, open [FBI](https://github.com/Steveice10/FBI) →
    **Remote Install → Scan QR Code**.
 3. Scan the QR code on the web app's `/install` page (it encodes the `.cia`
@@ -66,8 +67,11 @@ cross-compile toolchain).
 ```sh
 pnpm install
 
-# TypeScript workspaces (contract, api, web): build, typecheck, test
+# TypeScript workspaces (contract, site): build, typecheck, test
 pnpm turbo run build check test
+
+# Run the site locally (pages + /api/* from one origin)
+pnpm --filter @rom-archive/site dev        # http://localhost:3000
 
 # The console-agnostic C++ core, host unit tests + contract drift guard
 cd apps/3ds/core && make test && node scripts/check_contract.mjs
@@ -76,7 +80,19 @@ cd apps/3ds/core && make test && node scripts/check_contract.mjs
 cd apps/3ds && ./build.sh --check
 ```
 
-Per-app details are in `apps/api/README.md` and `apps/3ds/README.md`.
+The `/api/*` route handlers read `TGDB_API_KEY` from the environment for game
+metadata (TheGamesDB). It is optional — without it, metadata gracefully falls
+back to libretro. Copy `apps/site/.env.example` to `apps/site/.env.local` and set
+the key for local runs; set it in the Vercel project env for deploys.
+
+A live smoke suite exercises the pages and `/api/*` end-to-end against a running
+server (opt-in; no-op green without the env var):
+
+```sh
+SMOKE_BASE_URL=http://localhost:3000 pnpm --filter @rom-archive/site smoke
+```
+
+Per-app details are in `apps/3ds/README.md`.
 
 ## Proof
 

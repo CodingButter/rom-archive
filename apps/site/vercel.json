@@ -1,9 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
-  "buildCommand": "cd ../.. && pnpm turbo run build --filter=@rom-archive/contract",
+  "buildCommand": "cd ../.. && pnpm turbo run build --filter=@rom-archive/site",
   "functions": {
-    "api/*.ts": {
+    "src/app/api/**/route.ts": {
       "maxDuration": 10
     }
   }

@@ -1,5 +1,5 @@
 // router.hpp — FAT32-safe filename sanitization and SD path routing. Mirrors the
-// TypeScript apps/api/src/sanitize.ts exactly (both are host-tested) so the name
+// TypeScript apps/site/src/server/sanitize.ts exactly (both are host-tested) so the name
 // a ROM lands under on the SD card is decided identically on server and device.
 #pragma once
 

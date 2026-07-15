@@ -59,7 +59,7 @@ Build artifacts (`.elf` / `.3dsx` / `.smdh` / `.bnr` / `.cia`) are gitignored.
 ## Installing and testing on hardware
 
 1. Host the built `rom-archive.cia` somewhere the console can reach (the
-   `apps/web` install page serves it and shows a QR code).
+   `apps/site` install page serves it and shows a QR code).
 2. On the 3DS, open **FBI → Remote Install → Scan QR Code** and scan it. FBI
    downloads and installs the `.cia`.
 3. Launch **ROM Archive**, pick a catalog title, and press **A** to build a
