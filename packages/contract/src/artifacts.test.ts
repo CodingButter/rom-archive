@@ -24,6 +24,9 @@ describe("generated schema artifacts", () => {
       "ItemDetailResponse",
       "DownloadPlanRequest",
       "DownloadPlanResponse",
+      "ScanPointer",
+      "ResolvedFile",
+      "ResolveResponse",
     ]) {
       const schema = JSON.parse(read(`${name}.schema.json`)) as {
         $schema: string;
@@ -48,6 +51,9 @@ describe("generated schema artifacts", () => {
       "DownloadPlanRequest",
       "DownloadPlanResponse",
       "ItemDetailFile",
+      "ResolveResponse",
+      "ResolvedFile",
+      "ScanPointer",
     ]);
   });
 

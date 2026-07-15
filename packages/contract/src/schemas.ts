@@ -85,3 +85,48 @@ export const DownloadPlanResponseSchema = z.object({
   excluded: z.array(ExcludedFileSchema).optional(),
 });
 export type DownloadPlanResponse = z.infer<typeof DownloadPlanResponseSchema>;
+
+/**
+ * The versioned pointer a QR code carries. It names an item and, optionally, a
+ * single file within it (a bundle omits `file` ⇒ all ROM files). It carries NO
+ * `console`: console is derived server-side from the curated catalog, so there
+ * is exactly one source of truth. Strict: it crosses the QR boundary (untrusted
+ * input), so unknown keys are rejected rather than silently stripped.
+ */
+export const ScanPointerSchema = z.strictObject({
+  v: z.literal(1),
+  id: z.string().min(1),
+  file: z.string().min(1).optional(),
+});
+export type ScanPointer = z.infer<typeof ScanPointerSchema>;
+
+/**
+ * One file in a resolve response: the plan file shape plus OPTIONAL cover-art
+ * fields. `coverUrl` is a best-effort libretro thumbnail link (unverified — the
+ * console tolerates a 404); `coverTargetPath` is the TWiLight box-art path keyed
+ * to the ROM's routed on-SD basename. Both are present only for single-file
+ * playable ROMs with a known libretro system; archived entries omit them.
+ */
+export const ResolvedFileSchema = z.object({
+  name: z.string().min(1),
+  sizeBytes: ByteCount,
+  md5: z.string().min(1),
+  downloadUrl: z.url(),
+  targetPath: z.string().min(1),
+  coverUrl: z.url().optional(),
+  coverTargetPath: z.string().min(1).optional(),
+});
+export type ResolvedFile = z.infer<typeof ResolvedFileSchema>;
+
+/**
+ * The flat, storage-agnostic result of resolving a scan pointer. `console` is
+ * derived from the curated catalog. No fit math here — the console still calls
+ * `/plan` with free space for the fit decision.
+ */
+export const ResolveResponseSchema = z.object({
+  id: z.string().min(1),
+  console: ConsoleSchema,
+  files: z.array(ResolvedFileSchema),
+  totalBytes: ByteCount,
+});
+export type ResolveResponse = z.infer<typeof ResolveResponseSchema>;

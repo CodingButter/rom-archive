@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "coverTargetPath": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "coverUrl": {
+      "format": "uri",
+      "type": "string"
+    },
+    "downloadUrl": {
+      "format": "uri",
+      "type": "string"
+    },
+    "md5": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "name": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "sizeBytes": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "targetPath": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "sizeBytes",
+    "md5",
+    "downloadUrl",
+    "targetPath"
+  ],
+  "type": "object"
+}

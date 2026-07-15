@@ -25,6 +25,9 @@ import {
   ItemDetailResponseSchema,
   DownloadPlanRequestSchema,
   DownloadPlanResponseSchema,
+  ScanPointerSchema,
+  ResolvedFileSchema,
+  ResolveResponseSchema,
 } from "../src/schemas.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -54,6 +57,9 @@ const jsonSchemaTargets = {
   ItemDetailResponse: ItemDetailResponseSchema,
   DownloadPlanRequest: DownloadPlanRequestSchema,
   DownloadPlanResponse: DownloadPlanResponseSchema,
+  ScanPointer: ScanPointerSchema,
+  ResolvedFile: ResolvedFileSchema,
+  ResolveResponse: ResolveResponseSchema,
 } as const;
 
 /**
@@ -65,6 +71,9 @@ const mirroredTypes: Record<string, ZodObject> = {
   ItemDetailFile: ItemDetailFileSchema,
   DownloadPlanRequest: DownloadPlanRequestSchema,
   DownloadPlanResponse: DownloadPlanResponseSchema,
+  ScanPointer: ScanPointerSchema,
+  ResolvedFile: ResolvedFileSchema,
+  ResolveResponse: ResolveResponseSchema,
 };
 
 export function buildContractFields(): Record<string, string[]> {

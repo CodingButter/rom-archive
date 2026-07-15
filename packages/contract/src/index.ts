@@ -15,6 +15,9 @@ export {
   PlanFileSchema,
   ExcludedFileSchema,
   DownloadPlanResponseSchema,
+  ScanPointerSchema,
+  ResolvedFileSchema,
+  ResolveResponseSchema,
   type CatalogEntry,
   type CatalogResponse,
   type ItemDetailFile,
@@ -23,4 +26,7 @@ export {
   type PlanFile,
   type ExcludedFile,
   type DownloadPlanResponse,
+  type ScanPointer,
+  type ResolvedFile,
+  type ResolveResponse,
 } from "./schemas.js";

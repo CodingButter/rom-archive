@@ -23,5 +23,25 @@
     "md5",
     "name",
     "sizeBytes"
+  ],
+  "ResolveResponse": [
+    "console",
+    "files",
+    "id",
+    "totalBytes"
+  ],
+  "ResolvedFile": [
+    "coverTargetPath",
+    "coverUrl",
+    "downloadUrl",
+    "md5",
+    "name",
+    "sizeBytes",
+    "targetPath"
+  ],
+  "ScanPointer": [
+    "file",
+    "id",
+    "v"
   ]
 }

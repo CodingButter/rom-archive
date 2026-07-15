@@ -6,10 +6,14 @@ import {
   DownloadPlanResponseSchema,
   ItemDetailFileSchema,
   ItemDetailResponseSchema,
+  ScanPointerSchema,
+  ResolveResponseSchema,
   type CatalogResponse,
   type DownloadPlanRequest,
   type DownloadPlanResponse,
   type ItemDetailResponse,
+  type ScanPointer,
+  type ResolveResponse,
 } from "./schemas.js";
 
 const catalog: CatalogResponse = {
@@ -60,6 +64,35 @@ const planResponse: DownloadPlanResponse = {
   excluded: [{ name: "big.gba", sizeBytes: 9_000_000, reason: "insufficient-space" }],
 };
 
+const bundlePointer: ScanPointer = { v: 1, id: "homebrew-pack" };
+const individualPointer: ScanPointer = { v: 1, id: "homebrew-pack", file: "demo.gba" };
+
+const resolveResponse: ResolveResponse = {
+  id: "homebrew-pack",
+  console: "gba",
+  files: [
+    {
+      name: "demo.gba",
+      sizeBytes: 4096,
+      md5: "0123456789abcdef0123456789abcdef",
+      downloadUrl: "https://archive.org/download/homebrew-pack/demo.gba",
+      targetPath: "roms/gba/demo.gba",
+      coverUrl:
+        "https://thumbnails.libretro.com/Nintendo%20-%20Game%20Boy%20Advance/Named_Boxarts/demo.png",
+      coverTargetPath: "_nds/TWiLightMenu/boxart/demo.gba.png",
+    },
+    // a file with no cover candidate (archived / unknown system): cover fields absent
+    {
+      name: "archive.zip",
+      sizeBytes: 8192,
+      md5: "ffffffffffffffffffffffffffffffff",
+      downloadUrl: "https://archive.org/download/homebrew-pack/archive.zip",
+      targetPath: "roms/gba/archive.zip",
+    },
+  ],
+  totalBytes: 12288,
+};
+
 describe("wire schemas round-trip", () => {
   it("parses and re-serializes valid fixtures unchanged", () => {
     for (const [schema, value] of [
@@ -67,6 +100,9 @@ describe("wire schemas round-trip", () => {
       [ItemDetailResponseSchema, itemDetail],
       [DownloadPlanRequestSchema, planRequest],
       [DownloadPlanResponseSchema, planResponse],
+      [ScanPointerSchema, bundlePointer],
+      [ScanPointerSchema, individualPointer],
+      [ResolveResponseSchema, resolveResponse],
     ] as const) {
       const parsed = schema.parse(value);
       expect(parsed).toEqual(value);
@@ -132,5 +168,15 @@ describe("wire schemas reject invalid input", () => {
         surprise: true,
       }).success,
     ).toBe(false);
+  });
+
+  it("rejects a scan pointer with an unknown key (strict QR boundary)", () => {
+    expect(
+      ScanPointerSchema.safeParse({ v: 1, id: "x", console: "gba" }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a scan pointer with the wrong version", () => {
+    expect(ScanPointerSchema.safeParse({ v: 2, id: "x" }).success).toBe(false);
   });
 });
