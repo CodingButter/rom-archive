@@ -18,6 +18,32 @@ destination; it is derived server-side, never from the client. The full sets
 carry thousands of ROMs each, which is why the item endpoint and ROM list are
 paginated (below).
 
+## Cover art
+
+Covers are derived **client-side** from libretro's `Named_Boxarts` thumbnails.
+Because every full-set ROM is stored as a per-game archive (`.zip` for No-Intro
+NES/SNES/Genesis/PCE, `.7z` for GBA/GB/GBC/GG/SMS/DS), `coverUrlFor`
+(`src/lib/cover.ts`) strips the single trailing archive extension — the No-Intro
+archive stem _is_ the inner ROM title libretro names its box art by — and builds
+`…/Named_Boxarts/<Title>.png`. No image bytes are ever proxied: the browser links
+straight to libretro.
+
+Coverage is genuinely **partial** — libretro lacks box art for some obscure
+regional/unlicensed dumps — so `CoverImage` collapses any failed image to a
+placeholder tile. Expect a minority of tiles to fall back; that is not a bug.
+
+The item/bundle page additionally renders a **stitched mosaic cover**
+(`src/components/bundle-mosaic.tsx`): up to the first 10 member ROMs' covers tiled
+into one pack image, composed in the browser from libretro links only. Missing
+tiles render the same placeholder.
+
+The client `coverUrlFor` intentionally diverges from `src/server/cover.ts` on
+archive names: the server still gates archives to `null` because its output keys
+the on-device `.png` filename, which must match TWiLight's inner-ROM matching.
+The **3DS/CIA-side cover download is out of scope here and deferred to a future
+plan** — this change is website-display only. `src/lib/cover.test.ts` documents
+that divergence and keeps enforcing byte-identity for non-archive names.
+
 ## API endpoints
 
 All endpoints are same-origin route handlers under `/api/*`.
