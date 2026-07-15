@@ -29,13 +29,28 @@ archive stem _is_ the inner ROM title libretro names its box art by — and buil
 straight to libretro.
 
 Coverage is genuinely **partial** — libretro lacks box art for some obscure
-regional/unlicensed dumps — so `CoverImage` collapses any failed image to a
-placeholder tile. Expect a minority of tiles to fall back; that is not a bug.
+regional/unlicensed dumps. In the per-ROM list (`RomList`), `CoverImage` collapses
+any failed image to a placeholder tile. Expect a minority of covers to fall back;
+that is not a bug.
 
 The item/bundle page additionally renders a **stitched mosaic cover**
-(`src/components/bundle-mosaic.tsx`): up to the first 10 member ROMs' covers tiled
-into one pack image, composed in the browser from libretro links only. Missing
-tiles render the same placeholder.
+(`src/components/bundle-mosaic.tsx`). It samples a **random, deduplicated spread**
+of member ROMs from across the whole bundle — not the first 10, which on sets like
+the DS bundle are ten regional variants of the same one or two games — and draws
+their box-art onto a single `<canvas>` arranged as a **skewed, receding plane** (a
+slightly rotated flat table of covers). The sampling core is a pure, unit-tested
+helper (`src/lib/mosaic-sample.ts`): it walks one up-front shuffle of the page
+range so every fetch hits a distinct page, dedupes by derived cover URL, and caps
+at 10 tiles within a hard fetch bound.
+
+A canvas has no per-`<img>` `onError`, so missing covers are handled at the draw
+step: a cover that fails to load is drawn as a muted placeholder cell in its fixed
+slot, never a broken-image icon. Because libretro sends **no CORS headers**, the
+covers are loaded without `crossOrigin` (an anonymous request would fail to load),
+which taints the canvas — so the mosaic is **render-only**: it never calls
+`toDataURL`/`toBlob`, and there is deliberately no "save this stitched image"
+export. As everywhere else, no image bytes are proxied through the API; the canvas
+composes from libretro links in the browser.
 
 The client `coverUrlFor` intentionally diverges from `src/server/cover.ts` on
 archive names: the server still gates archives to `null` because its output keys

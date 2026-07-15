@@ -30,9 +30,14 @@ function pageResponse(
   return { id: "bundle", console, files: names.map(file), total, page, pageSize };
 }
 
-/** A fixed RNG so the spread walk is deterministic: identity order [1,2,3,...]. */
+/**
+ * A fixed RNG (always 0) so the spread walk is deterministic across runs. The
+ * resulting permutation is not ascending — with `j=0` every Fisher–Yates step
+ * rotates the array — but it IS a fixed, distinct permutation, which is all the
+ * assertions below rely on (distinct pages, >1 page, not the first-10 slice).
+ */
 function fixedRandom(): () => number {
-  return () => 0; // Fisher–Yates with random()=0 leaves the array in ascending order
+  return () => 0;
 }
 
 afterEach(() => {
@@ -179,6 +184,27 @@ describe("BundleMosaic", () => {
       expect(ctx.drawImage).toHaveBeenCalled(); // the loaded cover
     });
     expect(ctx.fillRect).toHaveBeenCalled(); // the placeholder cell for the failed one
+  });
+
+  it("an Image load firing AFTER unmount does not draw (disposed guard)", async () => {
+    const { created, ctx } = withMockCanvas();
+    fetchItemPage.mockResolvedValue(
+      pageResponse(["Late (USA).zip"], 1, 1, 10, "nes"),
+    );
+
+    const { unmount } = render(<BundleMosaic id="x" console="nes" title="NES" />);
+
+    await waitFor(() => {
+      expect(created.length).toBe(1);
+    });
+
+    // Unmount first, then let the in-flight image resolve. The disposed guard must
+    // swallow the late load — no further drawImage after teardown.
+    unmount();
+    ctx.drawImage.mockClear();
+    (created[0] as unknown as { onload: () => void }).onload();
+
+    expect(ctx.drawImage).not.toHaveBeenCalled();
   });
 
   it("does not throw when the 2D context is null (jsdom default) and still renders the canvas", async () => {
