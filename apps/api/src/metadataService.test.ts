@@ -6,7 +6,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { FetchLike } from "./archiveClient.js";
 import {
   ALLOWANCE_FLOOR,
+  CONFIRMED_NEGATIVE_TTL_MS,
   InMemoryCache,
+  POSITIVE_TTL_MS,
+  RETRY_TTL_MS,
   resolveMetadata,
   type ResolveDeps,
 } from "./metadataService.js";
@@ -65,7 +68,7 @@ describe("resolveMetadata", () => {
     const d = deps({ fetchImpl });
     const first = await resolveMetadata("gba", "No Such Game.gba", d);
     const second = await resolveMetadata("gba", "No Such Game.gba", d);
-    // Zero result falls back to libretro and is cached negatively.
+    // Zero result falls back to libretro, cached under the confirmed-negative shield.
     expect(first.source).toBe("libretro");
     expect(second.source).toBe("libretro");
     expect(fetchImpl.calls()).toBe(1);
@@ -115,5 +118,79 @@ describe("resolveMetadata", () => {
     await resolveMetadata("gba", "Metroid Fusion.gba", d);
     await resolveMetadata("gba", "Metroid Fusion.gba", d);
     expect(n).toBe(1);
+  });
+
+  it("allows exactly one probe when the allowance is unknown (null), then respects the recorded value", async () => {
+    const cache = new InMemoryCache();
+    // Report allowance just ABOVE the floor on the first probe.
+    const first = countingFetch(byGame, ALLOWANCE_FLOOR + 1);
+    await resolveMetadata("gba", "Metroid Fusion.gba", deps({ fetchImpl: first, cache }));
+    expect(first.calls()).toBe(1);
+
+    // floor+1 is above the floor ⇒ a different game may still probe TGDB.
+    const second = countingFetch(byGame);
+    const meta = await resolveMetadata(
+      "gba",
+      "Another Game.gba",
+      deps({ fetchImpl: second, cache }),
+    );
+    expect(meta.source).toBe("tgdb");
+    expect(second.calls()).toBe(1);
+  });
+
+  describe("TTL expiry (clock-driven)", () => {
+    it("re-probes TGDB for the SAME game only after the positive TTL elapses", async () => {
+      let clock = 1_000_000;
+      const cache = new InMemoryCache(() => clock);
+      const fetchImpl = countingFetch(byGame);
+      const d = deps({ fetchImpl, cache });
+
+      await resolveMetadata("gba", "Metroid Fusion.gba", d);
+      // Within the positive window: cached, no new fetch.
+      clock += POSITIVE_TTL_MS - 1;
+      await resolveMetadata("gba", "Metroid Fusion.gba", d);
+      expect(fetchImpl.calls()).toBe(1);
+
+      // Past the positive window: entry expired, exactly one more probe.
+      clock += 2;
+      await resolveMetadata("gba", "Metroid Fusion.gba", d);
+      expect(fetchImpl.calls()).toBe(2);
+    });
+
+    it("shields a confirmed TGDB no-match for the long confirmed-negative TTL, not a day", async () => {
+      let clock = 1_000_000;
+      const cache = new InMemoryCache(() => clock);
+      const fetchImpl = countingFetch(empty);
+      const d = deps({ fetchImpl, cache });
+
+      await resolveMetadata("gba", "No Such Game.gba", d);
+      // A full day later a confirmed no-match must NOT re-hit TGDB.
+      clock += 24 * 60 * 60 * 1000 + 1;
+      const again = await resolveMetadata("gba", "No Such Game.gba", d);
+      expect(again.source).toBe("libretro");
+      expect(fetchImpl.calls()).toBe(1);
+      // But it does re-probe once the long confirmed-negative shield elapses.
+      clock += CONFIRMED_NEGATIVE_TTL_MS;
+      await resolveMetadata("gba", "No Such Game.gba", d);
+      expect(fetchImpl.calls()).toBe(2);
+    });
+
+    it("retries TGDB quickly after an error (RETRY_TTL), not after days", async () => {
+      let clock = 1_000_000;
+      const cache = new InMemoryCache(() => clock);
+      let n = 0;
+      const errFetch: FetchLike = async () => {
+        n += 1;
+        return { ok: false, status: 503, json: async () => ({}) };
+      };
+      const d = deps({ fetchImpl: errFetch, cache });
+
+      await resolveMetadata("gba", "Metroid Fusion.gba", d);
+      expect(n).toBe(1);
+      // Just past the short retry window: TGDB is probed again.
+      clock += RETRY_TTL_MS + 1;
+      await resolveMetadata("gba", "Metroid Fusion.gba", d);
+      expect(n).toBe(2);
+    });
   });
 });

@@ -46,14 +46,18 @@ export class InMemoryCache implements MetadataCache {
  * TTLs, chosen to keep the ~1000 req/month TGDB budget intact:
  *  - POSITIVE: a found record is stable editorial data — cache it a long time so
  *    a game is fetched from TGDB at most once per month-ish window.
- *  - NEGATIVE: a "no match / unknown" result is cached briefly so a transient
- *    miss doesn't permanently hide a game, but long enough that a page refresh
- *    does not re-hit TGDB (the budget shield).
- *  - LIBRETRO: fallback records are cheap/keyless, medium TTL.
+ *  - CONFIRMED-NEGATIVE: TGDB answered and genuinely has no match for this
+ *    game. That answer is as stable as a positive one, so it earns the SAME long
+ *    shield — a no-match ROM (homebrew, region-tagged titles TGDB doesn't carry)
+ *    must not re-probe TGDB every day. This is the population most likely to miss,
+ *    so a short TTL here would be the biggest budget leak.
+ *  - RETRY: we did NOT get a definitive answer (no key, allowance floored, or
+ *    TGDB errored). Cache the libretro fallback only briefly so we recover — pick
+ *    TGDB back up once a key is set, the monthly budget resets, or the outage ends.
  */
 export const POSITIVE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // ~30 days
-export const NEGATIVE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-export const LIBRETRO_TTL_MS = 7 * 24 * 60 * 60 * 1000; // ~7 days
+export const CONFIRMED_NEGATIVE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // ~30 days
+export const RETRY_TTL_MS = 6 * 60 * 60 * 1000; // ~6 hours
 
 /**
  * When TGDB's reported remaining monthly allowance drops to or below this floor,
@@ -91,7 +95,9 @@ export interface ResolveDeps {
  *
  * libretro always yields at least a title-only record, so it is the effective
  * floor here; the handler layer maps a wholly-absent case to `unknownMetadata`.
- * Never throws to the caller: a broken metadata source degrades, it doesn't error.
+ * Upstream failures (TGDB non-OK ⇒ MetadataError) degrade to libretro rather than
+ * propagating; only an unexpected programming error would surface, which the
+ * handler layer catches to guarantee the page never errors.
  */
 export async function resolveMetadata(
   console: Console,
@@ -123,20 +129,23 @@ export async function resolveMetadata(
         await deps.cache.set(key, meta, POSITIVE_TTL_MS);
         return meta;
       }
-      // Zero results from TGDB: cache the negative so we don't re-hit TGDB for
-      // this game within the negative window, then fall through to libretro.
+      // TGDB definitively has no match: this answer is stable, so cache the
+      // libretro fallback under the long confirmed-negative shield — we must not
+      // re-probe TGDB for a genuine no-match every day.
       const fallback = fetchLibretroMetadata(console, name);
-      await deps.cache.set(key, fallback, NEGATIVE_TTL_MS);
+      await deps.cache.set(key, fallback, CONFIRMED_NEGATIVE_TTL_MS);
       return fallback;
     } catch (err) {
       if (!(err instanceof MetadataError)) throw err;
-      // TGDB errored (rate limit, outage): fall through to libretro below.
+      // TGDB errored (rate limit, outage): fall through to the RETRY path below
+      // so we pick TGDB back up shortly once it recovers.
     }
   }
 
-  // No key, allowance floored, or TGDB errored → libretro floor.
+  // No key, allowance floored, or TGDB errored — none of these is a definitive
+  // "no match", so shield only briefly (RETRY_TTL) and recover next window.
   const libretro = fetchLibretroMetadata(console, name);
-  await deps.cache.set(key, libretro, LIBRETRO_TTL_MS);
+  await deps.cache.set(key, libretro, RETRY_TTL_MS);
   return libretro;
 }
 
