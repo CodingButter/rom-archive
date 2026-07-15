@@ -92,7 +92,8 @@ server (opt-in; no-op green without the env var):
 SMOKE_BASE_URL=http://localhost:3000 pnpm --filter @rom-archive/site smoke
 ```
 
-Per-app details are in `apps/3ds/README.md`.
+Per-app details are in `apps/site/README.md` (catalog, `/api/*` endpoints incl.
+item pagination + name search, environment) and `apps/3ds/README.md`.
 
 ## Proof
 
