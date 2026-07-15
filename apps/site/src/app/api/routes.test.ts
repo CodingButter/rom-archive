@@ -119,6 +119,34 @@ describe("POST /api/plan", () => {
     expect(res.status).toBe(400);
   });
 
+  it("400s on an unknown extra key (strict request boundary)", async () => {
+    stubFetch(realMetadata);
+    const { POST } = await import("./plan/route");
+    const res = await POST(
+      new Request("http://t/api/plan", {
+        method: "POST",
+        body: JSON.stringify({
+          id: "gbahomebrew",
+          freeSpaceBytes: 100_000_000,
+          rogue: true,
+        }),
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("502s when archive.org fails upstream", async () => {
+    stubFetch({}, { ok: false, status: 503 });
+    const { POST } = await import("./plan/route");
+    const res = await POST(
+      new Request("http://t/api/plan", {
+        method: "POST",
+        body: JSON.stringify({ id: "gbahomebrew", freeSpaceBytes: 100_000_000 }),
+      }),
+    );
+    expect(res.status).toBe(502);
+  });
+
   it("400s on an unparseable body", async () => {
     stubFetch(realMetadata);
     const { POST } = await import("./plan/route");
@@ -158,6 +186,7 @@ describe("GET /api/metadata", () => {
 
   it("400s on a missing id or name", async () => {
     stubFetch(tgdbByGame);
+    vi.stubEnv("TGDB_API_KEY", "test-key");
     const { GET } = await import("./metadata/route");
     const noId = await GET(new Request("http://t/api/metadata?name=x.gba"));
     expect(noId.status).toBe(400);
@@ -191,6 +220,8 @@ describe("GET /api/metadata", () => {
     expect(res.status).toBe(200);
     const meta = (await res.json()) as GameMetadata;
     expect(["libretro", "unknown"]).toContain(meta.source);
+    // The libretro floor still preserves a usable title from the ROM name.
+    expect(meta.title).toBe("Metroid Fusion");
     expect(calls.some((u) => u.includes("/download/"))).toBe(false);
   });
 });
