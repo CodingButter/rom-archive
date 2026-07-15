@@ -1,0 +1,69 @@
+{
+  "code": 200,
+  "status": "Success",
+  "data": {
+    "count": 12,
+    "platforms": {
+      "4": {
+        "id": 4,
+        "name": "Nintendo Game Boy",
+        "alias": "nintendo-gameboy"
+      },
+      "5": {
+        "id": 5,
+        "name": "Nintendo Game Boy Advance",
+        "alias": "nintendo-gameboy-advance"
+      },
+      "6": {
+        "id": 6,
+        "name": "Super Nintendo (SNES)",
+        "alias": "super-nintendo-snes"
+      },
+      "7": {
+        "id": 7,
+        "name": "Nintendo Entertainment System (NES)",
+        "alias": "nintendo-entertainment-system-nes"
+      },
+      "8": {
+        "id": 8,
+        "name": "Nintendo DS",
+        "alias": "nintendo-ds"
+      },
+      "18": {
+        "id": 18,
+        "name": "Sega Genesis",
+        "alias": "sega-genesis"
+      },
+      "20": {
+        "id": 20,
+        "name": "Sega Game Gear",
+        "alias": "sega-game-gear"
+      },
+      "34": {
+        "id": 34,
+        "name": "TurboGrafx 16",
+        "alias": "turbografx-16"
+      },
+      "35": {
+        "id": 35,
+        "name": "Sega Master System",
+        "alias": "sega-master-system"
+      },
+      "36": {
+        "id": 36,
+        "name": "Sega Mega Drive",
+        "alias": "sega-mega-drive"
+      },
+      "41": {
+        "id": 41,
+        "name": "Nintendo Game Boy Color",
+        "alias": "nintendo-gameboy-color"
+      },
+      "25": {
+        "id": 25,
+        "name": "3DO",
+        "alias": "3do"
+      }
+    }
+  }
+}
