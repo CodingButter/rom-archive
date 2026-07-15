@@ -84,14 +84,17 @@ export interface ResolveDeps {
 }
 
 /**
- * Resolve metadata for a single game, TGDB-first with a libretro fallback and an
- * "unknown" floor, cached so each distinct game triggers AT MOST ONE TGDB request
- * per positive/negative TTL window. Flow:
- *   1. Cache hit (positive OR negative) → return immediately, no fetch.
+ * Resolve metadata for a single game, TGDB-first with a libretro fallback,
+ * cached so each distinct game triggers AT MOST ONE TGDB request per TTL window.
+ * Flow (TTL rationale on the constants above):
+ *   1. Cache hit → return immediately, no fetch.
  *   2. Miss + key present + last-known allowance above floor → TGDB.
- *        found  → cache positive (long TTL), record allowance.
- *        miss   → cache negative (short TTL), then try libretro.
- *   3. No key / allowance floored / TGDB threw → libretro (cache medium TTL).
+ *        found         → cache positive (long, ~30d), record allowance.
+ *        confirmed miss → cache the libretro fallback under the LONG
+ *                         confirmed-negative shield (~30d): a genuine no-match is
+ *                         stable and must not re-probe TGDB. Then return it.
+ *   3. No key / allowance floored / TGDB errored → libretro under the SHORT retry
+ *      TTL (~6h), so the service recovers once TGDB is usable again.
  *
  * libretro always yields at least a title-only record, so it is the effective
  * floor here; the handler layer maps a wholly-absent case to `unknownMetadata`.

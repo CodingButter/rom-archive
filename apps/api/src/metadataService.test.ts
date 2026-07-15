@@ -164,7 +164,10 @@ describe("resolveMetadata", () => {
       const d = deps({ fetchImpl, cache });
 
       await resolveMetadata("gba", "No Such Game.gba", d);
-      // A full day later a confirmed no-match must NOT re-hit TGDB.
+      // A full day later a confirmed no-match must NOT re-hit TGDB. At day+1 the
+      // recorded allowance (998, from the empty fixture) is still fresh and above
+      // floor, so it is the confirmed-negative SHIELD — not a floored allowance —
+      // that suppresses the fetch here.
       clock += 24 * 60 * 60 * 1000 + 1;
       const again = await resolveMetadata("gba", "No Such Game.gba", d);
       expect(again.source).toBe("libretro");
