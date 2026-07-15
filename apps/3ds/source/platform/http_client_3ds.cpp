@@ -18,8 +18,13 @@ constexpr std::uint32_t kMaxRedirects = 8;
 // Drive one httpc context through connection + redirect follow, then stream the
 // body. On a 3xx with a Location, the context is torn down and reopened against
 // the new URL (libctru does not transparently follow redirects).
+//
+// `insecure` disables TLS peer verification and is set ONLY for archive.org byte
+// downloads, whose modern certs the frozen 3DS root-CA store cannot validate;
+// integrity there is guaranteed by the mandatory MD5 check, not the transport.
+// Requests to our own API keep full verification.
 HttpResult run(std::string url, const ChunkSink& onChunk, const char* contentType,
-               const std::string* postBody) {
+               const std::string* postBody, bool insecure) {
   HttpResult result{false, 0, ""};
 
   for (std::uint32_t redirect = 0; redirect <= kMaxRedirects; ++redirect) {
@@ -31,9 +36,12 @@ HttpResult run(std::string url, const ChunkSink& onChunk, const char* contentTyp
       return result;
     }
 
-    // archive.org certs are not in the frozen 3DS root-CA store; disable peer
-    // verification. Keep-alive off keeps the redirect teardown simple.
-    httpcSetSSLOpt(&ctx, SSLCOPT_DisableVerify);
+    // Peer verification is disabled only for archive.org byte downloads (see
+    // `insecure` note above); requests to our own API keep it on. Keep-alive off
+    // keeps the redirect teardown simple.
+    if (insecure) {
+      httpcSetSSLOpt(&ctx, SSLCOPT_DisableVerify);
+    }
     httpcSetKeepAlive(&ctx, HTTPC_KEEPALIVE_DISABLED);
     httpcAddRequestHeaderField(&ctx, "User-Agent", "rom-archive-3ds/1.0");
 
@@ -116,7 +124,8 @@ HttpResult run(std::string url, const ChunkSink& onChunk, const char* contentTyp
 }  // namespace
 
 HttpResult Http3ds::get(const std::string& url, const ChunkSink& onChunk) {
-  return run(url, onChunk, nullptr, nullptr);
+  // Byte download from archive.org: verify-disable is scoped here only.
+  return run(url, onChunk, nullptr, nullptr, /*insecure=*/true);
 }
 
 bool Http3ds::getString(const std::string& url, std::string& out) {
@@ -127,7 +136,7 @@ bool Http3ds::getString(const std::string& url, std::string& out) {
         out.append(reinterpret_cast<const char*>(data), len);
         return true;
       },
-      nullptr, nullptr);
+      nullptr, nullptr, /*insecure=*/false);
   return r.ok;
 }
 
@@ -139,7 +148,7 @@ bool Http3ds::postJson(const std::string& url, const std::string& body, std::str
         out.append(reinterpret_cast<const char*>(data), len);
         return true;
       },
-      "application/json", &body);
+      "application/json", &body, /*insecure=*/false);
   return r.ok;
 }
 

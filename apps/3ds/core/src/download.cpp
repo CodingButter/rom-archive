@@ -4,6 +4,20 @@
 
 namespace rom_archive {
 
+namespace {
+
+// Defense-in-depth: the API sanitizes filenames and routes into roms/<console>/,
+// but the console still trusts the server for where bytes land on the SD. Reject
+// any targetPath that is not confined under roms/ or that contains a parent
+// traversal, so a buggy or hostile response can never write outside roms/.
+bool isSafeTargetPath(const std::string& path) {
+  if (path.rfind("roms/", 0) != 0) return false;
+  if (path.find("..") != std::string::npos) return false;
+  return true;
+}
+
+}  // namespace
+
 DownloadReport downloadPlan(HttpClient& http, FileSink& sink,
                             const DownloadPlanResponse& plan,
                             const ProgressFn& progress) {
@@ -16,6 +30,12 @@ DownloadReport downloadPlan(HttpClient& http, FileSink& sink,
     result.targetPath = file.targetPath;
     result.expectedMd5 = file.md5;
     result.status = DownloadStatus::Ok;
+
+    if (!isSafeTargetPath(file.targetPath)) {
+      result.status = DownloadStatus::UnsafePath;
+      report.files.push_back(result);
+      continue;
+    }
 
     if (!sink.open(file.targetPath)) {
       result.status = DownloadStatus::WriteError;

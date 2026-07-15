@@ -22,6 +22,7 @@ enum class DownloadStatus {
   HttpError,       // the transfer failed at the transport layer
   WriteError,      // the SD write failed
   Md5Mismatch,     // the file downloaded but its digest did not match
+  UnsafePath,      // the server-supplied targetPath escaped roms/ — rejected
 };
 
 struct FileResult {

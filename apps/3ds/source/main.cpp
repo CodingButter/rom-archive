@@ -163,6 +163,7 @@ int main() {
             const char* tag = r.status == DownloadStatus::Ok ? "[ok] "
                               : r.status == DownloadStatus::Md5Mismatch ? "[md5!] "
                               : r.status == DownloadStatus::WriteError ? "[write!] "
+                              : r.status == DownloadStatus::UnsafePath ? "[path!] "
                                                                        : "[net!] ";
             rows.push_back(tag + r.name);
           }

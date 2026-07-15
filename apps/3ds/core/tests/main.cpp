@@ -345,3 +345,24 @@ TEST_CASE("downloadPlan reports an http failure") {
   CHECK(report.files[0].status == DownloadStatus::HttpError);
   CHECK(sink.committed.count("roms/gba/rom.gba") == 0);
 }
+
+TEST_CASE("downloadPlan rejects a targetPath that escapes roms/") {
+  const std::string body = "malicious";
+  const std::string good = md5Hex(bytesOf(body).data(), body.size());
+
+  auto plan = makePlan(body, good);
+  FakeHttp http;
+  http.bodies[plan.files[0].downloadUrl] = body;
+
+  SUBCASE("parent traversal") { plan.files[0].targetPath = "roms/gba/../../evil.txt"; }
+  SUBCASE("outside roms") { plan.files[0].targetPath = "sys/evil.txt"; }
+  SUBCASE("absolute-ish") { plan.files[0].targetPath = "/etc/evil"; }
+
+  FakeSink sink;
+  const auto report = downloadPlan(http, sink, plan);
+  REQUIRE(report.files.size() == 1);
+  CHECK(report.files[0].status == DownloadStatus::UnsafePath);
+  CHECK_FALSE(report.allOk());
+  // Nothing was ever opened or written for an unsafe path.
+  CHECK(sink.committed.empty());
+}
