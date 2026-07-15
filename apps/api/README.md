@@ -15,14 +15,29 @@ direct 3DS ↔ archive.org transfer.
 - `POST /api/plan` (`DownloadPlanRequest`) → `DownloadPlanResponse` — a fit-aware
   plan: which files fit the reported free space (smallest-first), their on-SD
   target paths, and what was excluded and why.
+- `GET /api/metadata?id=<catalog-id>&name=<rom-name>` → `GameMetadata` — game
+  metadata (title, platform, release date, genre, overview, developer/publisher,
+  box art) for the web ROM-detail page. Sourced from TheGamesDB when available,
+  with a keyless libretro fallback, degrading to a graceful `unknown` record.
+  Cached so each distinct game costs at most one TheGamesDB request per TTL
+  window. Never returns 5xx on an upstream failure — worst case is an `unknown`
+  record with a 200 so the page always renders.
 
-All request/response shapes come from `@rom-archive/contract`.
+All request/response shapes except `GameMetadata` (API-local) come from
+`@rom-archive/contract`.
+
+## Environment
+
+- `TGDB_API_KEY` — TheGamesDB API key for `/api/metadata`. Keyed source with a
+  hard ~1000 requests/month budget; read only from the environment, never
+  committed. Absent ⇒ metadata falls back to the keyless libretro source. See
+  `.env.example`.
 
 ## Architecture
 
 Each Vercel function in `api/` is a thin `(req, res)` wrapper over an exported
-pure function in `src/handlers.ts` (`handleCatalog`, `handleItem`, `handlePlan`)
-that takes plain input and returns `{ status, body }`. Tests and the end-to-end
+pure function in `src/handlers.ts` (`handleCatalog`, `handleItem`, `handlePlan`,
+`handleMetadata`) that takes plain input and returns `{ status, body }`. Tests and the end-to-end
 proof call the pure functions directly, so no running server is needed to
 exercise the full request logic.
 
