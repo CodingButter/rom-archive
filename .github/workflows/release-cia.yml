@@ -31,7 +31,7 @@ jobs:
           # The base URL the released CIA talks to at runtime. Set the
           # API_BASE_URL repository variable to the deployed API origin; the
           # fallback keeps the build reproducible if it is unset.
-          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://rom-archive-api.vercel.app' }}
+          API_BASE_URL: ${{ vars.API_BASE_URL || 'https://rom-archive.vercel.app' }}
         run: |
           chmod +x apps/3ds/build.sh
           API_BASE_URL="$API_BASE_URL" KEEP_ARTIFACTS=1 apps/3ds/build.sh --check
