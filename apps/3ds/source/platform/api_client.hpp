@@ -19,8 +19,11 @@ class ApiClient {
   // GET /api/catalog
   std::optional<CatalogResponse> fetchCatalog();
 
-  // GET /api/item?id=<id>
-  std::optional<ItemDetailResponse> fetchItem(const std::string& id);
+  // GET /api/item?id=<id>&page=<page>&pageSize=<pageSize>
+  // Returns one bounded page of the item's files plus paging metadata
+  // (ItemDetailResponse::total/page/pageSize populated). `page` is 1-based.
+  std::optional<ItemDetailResponse> fetchItemPage(const std::string& id, int page,
+                                                  int pageSize);
 
   // POST /api/plan with the request body; server does the fit math.
   std::optional<DownloadPlanResponse> fetchPlan(const DownloadPlanRequest& req);

@@ -141,6 +141,13 @@ struct ItemDetailResponse {
   std::string id;
   Console console;
   std::vector<ItemDetailFile> files;
+  // Paging metadata. Zero when the server returned an unpaginated full-list
+  // response (id-only request); populated when the response is one page of an
+  // ItemPageResponse (id + page + pageSize request). `total` is the count of
+  // files in the whole item; `files` holds only the current page.
+  std::int64_t total = 0;
+  std::int64_t page = 0;
+  std::int64_t pageSize = 0;
 };
 
 }  // namespace rom_archive

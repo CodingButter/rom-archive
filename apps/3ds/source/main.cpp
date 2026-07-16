@@ -14,6 +14,7 @@
 #include <3ds.h>
 
 #include <algorithm>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -99,6 +100,17 @@ int main() {
   bool confirmFromScan = false;
   int scanShownFrames = -1;
 
+  // Paged item browsing. A bundle can hold thousands of files, so the Item
+  // screen fetches one bounded page at a time (L/R page) instead of the whole
+  // list. `itemPage`/`itemTotalPages` track position; `selectedNames` records
+  // the user's checkbox picks by filename so a marked subset survives paging
+  // (the UI's per-row checkboxes reset on each new page).
+  constexpr int kItemPageSize = 100;
+  std::string itemId;
+  int itemPage = 1;
+  int itemTotalPages = 1;
+  std::set<std::string> selectedNames;
+
   // Load the catalog once up front so Browse is instant, then present the top
   // menu. A catalog failure is non-fatal here: Scan QR does not need it.
   ui.setStatus("Loading catalog...");
@@ -117,6 +129,47 @@ int main() {
     ui.setStatus("A: select   START: quit");
     screen = Screen::Menu;
   };
+
+  // Render the current item page onto the top screen: one row per file, a [x]
+  // prefix for files already marked in selectedNames (carried across pages),
+  // plus a page-count status line. `item` already holds the fetched page.
+  auto renderItemPage = [&]() {
+    itemTotalPages =
+        item.pageSize > 0
+            ? static_cast<int>((item.total + item.pageSize - 1) / item.pageSize)
+            : 1;
+    if (itemTotalPages < 1) itemTotalPages = 1;
+
+    // The UI draws its own [x]/[ ] checkbox in multi-select mode, so rows carry
+    // only the label; setChecked below restores the mark state for this page.
+    std::vector<std::string> rows;
+    rows.reserve(item.files.size());
+    for (const auto& f : item.files)
+      rows.push_back(f.name + "  (" + bytesHuman(f.sizeBytes) + ")");
+    ui.setList(std::move(rows));
+    ui.setMultiSelect(true);
+    for (std::size_t i = 0; i < item.files.size(); ++i)
+      ui.setChecked(static_cast<int>(i), selectedNames.count(item.files[i].name) != 0);
+    ui.setStatus("Page " + std::to_string(itemPage) + "/" +
+                 std::to_string(itemTotalPages) + "   L/R: page  X: mark  " +
+                 "A: get marked/this  Y: whole bundle  B: back");
+  };
+
+  // Fetch a 1-based item page, clamp to range, and render it. Returns false on
+  // a transport/parse failure (caller shows the error screen).
+  auto loadItemPage = [&](int page) -> bool {
+    if (page < 1) page = 1;
+    if (page > itemTotalPages) page = itemTotalPages;
+    ui.setStatus("Loading page " + std::to_string(page) + "...");
+    ui.draw();
+    auto it = api.fetchItemPage(itemId, page, kItemPageSize);
+    if (!it) return false;
+    item = *it;
+    itemPage = page;
+    renderItemPage();
+    return true;
+  };
+
   showMenu();
 
   while (ui.poll()) {
@@ -213,16 +266,14 @@ int main() {
           showMenu();
         } else if (ui.pressedA() && !catalog.entries.empty()) {
           const CatalogEntry& e = catalog.entries[ui.selectedIndex()];
-          ui.setStatus("Loading item...");
-          ui.draw();
-          if (auto it = api.fetchItem(e.id)) {
-            item = *it;
-            std::vector<std::string> rows;
-            for (const auto& f : item.files)
-              rows.push_back(f.name + "  (" + bytesHuman(f.sizeBytes) + ")");
-            ui.setList(std::move(rows));
-            ui.setMultiSelect(true);
-            ui.setStatus("A: download this  X: mark  Y: whole bundle  L/R: page  B: back");
+          // Open the item on its first page. A bundle can hold thousands of
+          // files, so we never fetch the whole list — one bounded page loads
+          // fast and L/R walk the rest.
+          itemId = e.id;
+          itemPage = 1;
+          itemTotalPages = 1;
+          selectedNames.clear();
+          if (loadItemPage(1)) {
             screen = Screen::Item;
           } else {
             screen = Screen::Error;
@@ -238,26 +289,43 @@ int main() {
           std::vector<std::string> rows;
           for (const auto& e : catalog.entries) rows.push_back(e.title);
           ui.setList(std::move(rows));
+          ui.setMultiSelect(false);
           ui.setStatus("A: open   START: quit");
           screen = Screen::Catalog;
+        } else if (ui.pressedL()) {
+          if (itemPage > 1 && !loadItemPage(itemPage - 1)) {
+            screen = Screen::Error;
+            errorMsg = "Failed to load page." +
+                       (api.lastError().empty() ? "" : " [" + api.lastError() + "]");
+          }
+        } else if (ui.pressedR()) {
+          if (itemPage < itemTotalPages && !loadItemPage(itemPage + 1)) {
+            screen = Screen::Error;
+            errorMsg = "Failed to load page." +
+                       (api.lastError().empty() ? "" : " [" + api.lastError() + "]");
+          }
         } else if (ui.pressedX()) {
-          // Toggle the highlighted file into/out of the selection.
+          // Toggle the highlighted file's mark, mirroring it into the
+          // name-keyed selection set so it survives page changes.
           ui.toggleSelected();
+          const std::size_t sel = static_cast<std::size_t>(ui.selectedIndex());
+          if (sel < item.files.size()) {
+            const std::string& name = item.files[sel].name;
+            if (selectedNames.count(name)) selectedNames.erase(name);
+            else selectedNames.insert(name);
+          }
         } else if (ui.pressedA() || ui.pressedY()) {
-          // Y plans the whole bundle. A plans the marked subset — or, when
-          // nothing is marked, just the highlighted file. Downloading
-          // everything is never the silent default: it takes the explicit Y.
+          // Y plans the whole bundle. A plans the marked subset (across every
+          // page) — or, when nothing is marked, just the highlighted file.
+          // Downloading everything is never the silent default: it takes Y.
           DownloadPlanRequest req;
-          req.id = item.id;
+          req.id = itemId;
           req.freeSpaceBytes = sdFreeBytes();
           if (ui.pressedY()) {
             req.selectedFileNames = std::nullopt;  // whole bundle
-          } else if (ui.anyChecked()) {
-            std::vector<std::string> chosen;
-            for (int i : ui.checkedIndices())
-              if (static_cast<std::size_t>(i) < item.files.size())
-                chosen.push_back(item.files[i].name);
-            req.selectedFileNames = std::move(chosen);
+          } else if (!selectedNames.empty()) {
+            req.selectedFileNames =
+                std::vector<std::string>(selectedNames.begin(), selectedNames.end());
           } else {
             const std::size_t sel = static_cast<std::size_t>(ui.selectedIndex());
             if (sel >= item.files.size()) break;

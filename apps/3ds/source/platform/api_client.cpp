@@ -51,9 +51,13 @@ std::optional<CatalogResponse> ApiClient::fetchCatalog() {
   return parseCatalogResponse(body);
 }
 
-std::optional<ItemDetailResponse> ApiClient::fetchItem(const std::string& id) {
+std::optional<ItemDetailResponse> ApiClient::fetchItemPage(const std::string& id, int page,
+                                                           int pageSize) {
   std::string body;
-  if (!http_.getString(baseUrl_ + "/api/item?id=" + id, body)) return std::nullopt;
+  const std::string url = baseUrl_ + "/api/item?id=" + urlEncode(id) +
+                          "&page=" + std::to_string(page) +
+                          "&pageSize=" + std::to_string(pageSize);
+  if (!http_.getString(url, body)) return std::nullopt;
   return parseItemDetailResponse(body);
 }
 

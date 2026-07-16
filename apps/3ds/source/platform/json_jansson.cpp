@@ -170,6 +170,14 @@ std::optional<ItemDetailResponse> parseItemDetailResponse(const std::string& tex
     if (!json_is_object(f)) return std::nullopt;
     out.files.push_back(parseItemFile(f, ok));
   }
+  // Paging metadata is optional: present on a paginated (page/pageSize) request,
+  // absent on an id-only full-list request. Left at 0 when absent.
+  if (json_t* t = json_object_get(root.j, "total"); t && json_is_integer(t))
+    out.total = static_cast<std::int64_t>(json_integer_value(t));
+  if (json_t* p = json_object_get(root.j, "page"); p && json_is_integer(p))
+    out.page = static_cast<std::int64_t>(json_integer_value(p));
+  if (json_t* ps = json_object_get(root.j, "pageSize"); ps && json_is_integer(ps))
+    out.pageSize = static_cast<std::int64_t>(json_integer_value(ps));
   if (!ok) return std::nullopt;
   return out;
 }

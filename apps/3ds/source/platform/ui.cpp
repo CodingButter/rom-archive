@@ -50,13 +50,6 @@ bool Ui::poll() {
     if (down_ & KEY_DOWN) selected_ = std::min<int>(selected_ + 1, last);
     if (down_ & KEY_UP) selected_ = std::max<int>(selected_ - 1, 0);
 
-    // Multi-select mode pages a whole screen at a time with the shoulder
-    // buttons — the only sane way to move through a 5000-file bundle.
-    if (multiSelect_) {
-      if (down_ & KEY_R) selected_ = std::min<int>(selected_ + kVisibleRows, last);
-      if (down_ & KEY_L) selected_ = std::max<int>(selected_ - kVisibleRows, 0);
-    }
-
     // Keep the selection inside the visible window.
     if (selected_ < scroll_) scroll_ = selected_;
     if (selected_ >= scroll_ + kVisibleRows) scroll_ = selected_ - kVisibleRows + 1;
@@ -76,6 +69,11 @@ void Ui::toggleSelected() {
   if (!multiSelect_ || items_.empty()) return;
   if (static_cast<std::size_t>(selected_) >= checked_.size()) return;
   checked_[selected_] = !checked_[selected_];
+}
+
+void Ui::setChecked(int index, bool on) {
+  if (index < 0 || static_cast<std::size_t>(index) >= checked_.size()) return;
+  checked_[index] = on;
 }
 
 std::vector<int> Ui::checkedIndices() const {
