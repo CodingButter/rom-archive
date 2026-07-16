@@ -167,4 +167,31 @@ Recorded honest starting state.
 - SMDH decode confirms: short title "ROM Archive", long title the description,
   publisher "rom-archive", and the 48x48 large-icon region is 4544/4608 bytes
   non-zero — the real icon is embedded, not a blank/default placeholder.
-## Phase 7 — Ship checks (PENDING)
+## Phase 7 — Ship checks (IN PROGRESS — local gates PASS, awaiting on-device)
+- Full gate green:
+  - `check_contract.mjs` GREEN (pre-existing baseline drift fixed in P1).
+  - Core doctest: 28 cases / 214 assertions green.
+  - Site suite: 287/287 green; `tsc --noEmit` clean; `next build` clean.
+  - Device `.cia` builds + links quirc + camera + browse, SMDH embeds
+    icon/title: 270784 bytes, `--check passed`.
+- No-drift (`git diff main...HEAD`): confined to `apps/3ds/`, the single new
+  `apps/site` resolve route + handler + tests, and `.mastracode/`. Zero
+  `packages/contract` schema edits, zero website-UI edits, zero unrelated
+  server edits.
+- Adversarial review (anthropic/claude-opus-4-8) on the implemented diff: NO
+  must-fix. Verified against source: camera teardown on all five exit paths,
+  no stale-item deref, sentinel field-set match, both parsers validate
+  identically, QR path inherits downloadPlan's unconditional roms/-only + MD5.
+  - Acted on review risks: (1) a NEW doctest for `"files":{}` surfaced a real
+    host/device parity bug — host nlohmann accepted a JSON object for `files`
+    (range-for over object values) while device jansson rejected non-arrays;
+    fixed the host to require an array. (2) Split the scan failure message
+    (request/parse failure vs empty resolve). (3) Pinned `totalBytes == sum(
+    sizeBytes)` in the resolve route test.
+- README updated: two entry paths (browse + scan QR), `/api/resolve`, vendored
+  quirc + ISC license, icon/title.
+- REMAINING: cut a release tag, confirm `release-cia.yml` succeeds and the
+  asset URL returns 200, then hand the user the FBI install QR + on-device
+  checklist (recognizable install, browse-select-download, whole-bundle,
+  single-ROM QR, bundle QR, camera cancel/re-enter). Human approval gate
+  before merge.
