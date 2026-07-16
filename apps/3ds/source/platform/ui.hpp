@@ -24,10 +24,27 @@ class Ui {
 
   bool pressedA() const { return down_ & KEY_A; }
   bool pressedB() const { return down_ & KEY_B; }
+  bool pressedX() const { return down_ & KEY_X; }
 
   // Set the scrollable list shown on the top screen and the current selection.
+  // Clears any multi-select state and returns to plain single-list mode.
   void setList(std::vector<std::string> items);
   int selectedIndex() const { return selected_; }
+
+  // Multi-select mode. When enabled, the list gains a per-row checkbox toggled
+  // with A (see toggleSelected), and L/R page the view by a screen at a time.
+  // Plain single-list mode (the catalog) leaves this off and A is a normal
+  // "open" press handled by the caller.
+  void setMultiSelect(bool on) { multiSelect_ = on; }
+  bool multiSelect() const { return multiSelect_; }
+
+  // Toggle the checkbox on the currently highlighted row. No-op unless in
+  // multi-select mode.
+  void toggleSelected();
+
+  // The 0-based indices of every checked row, in ascending order.
+  std::vector<int> checkedIndices() const;
+  bool anyChecked() const;
 
   // One-line status shown on the bottom screen (e.g. "Downloading 2/5...").
   void setStatus(std::string status) { status_ = std::move(status); }
@@ -39,6 +56,8 @@ class Ui {
   std::vector<std::string> items_;
   int selected_ = 0;
   int scroll_ = 0;
+  bool multiSelect_ = false;
+  std::vector<bool> checked_;  // per-row checkbox state, sized to items_
   std::string status_;
   u32 down_ = 0;
 

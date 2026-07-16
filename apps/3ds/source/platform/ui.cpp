@@ -42,8 +42,16 @@ bool Ui::poll() {
   if (down_ & KEY_START) return false;
 
   if (!items_.empty()) {
-    if (down_ & KEY_DOWN) selected_ = std::min<int>(selected_ + 1, items_.size() - 1);
+    const int last = static_cast<int>(items_.size()) - 1;
+    if (down_ & KEY_DOWN) selected_ = std::min<int>(selected_ + 1, last);
     if (down_ & KEY_UP) selected_ = std::max<int>(selected_ - 1, 0);
+
+    // Multi-select mode pages a whole screen at a time with the shoulder
+    // buttons — the only sane way to move through a 5000-file bundle.
+    if (multiSelect_) {
+      if (down_ & KEY_R) selected_ = std::min<int>(selected_ + kVisibleRows, last);
+      if (down_ & KEY_L) selected_ = std::max<int>(selected_ - kVisibleRows, 0);
+    }
 
     // Keep the selection inside the visible window.
     if (selected_ < scroll_) scroll_ = selected_;
@@ -56,6 +64,27 @@ void Ui::setList(std::vector<std::string> items) {
   items_ = std::move(items);
   selected_ = 0;
   scroll_ = 0;
+  multiSelect_ = false;
+  checked_.assign(items_.size(), false);
+}
+
+void Ui::toggleSelected() {
+  if (!multiSelect_ || items_.empty()) return;
+  if (static_cast<std::size_t>(selected_) >= checked_.size()) return;
+  checked_[selected_] = !checked_[selected_];
+}
+
+std::vector<int> Ui::checkedIndices() const {
+  std::vector<int> out;
+  for (std::size_t i = 0; i < checked_.size(); ++i)
+    if (checked_[i]) out.push_back(static_cast<int>(i));
+  return out;
+}
+
+bool Ui::anyChecked() const {
+  for (bool b : checked_)
+    if (b) return true;
+  return false;
 }
 
 void Ui::draw() {
@@ -69,17 +98,20 @@ void Ui::draw() {
   const int end = std::min<int>(scroll_ + kVisibleRows, static_cast<int>(items_.size()));
   float y = 8.0f;
   for (int i = scroll_; i < end; ++i) {
-    C2D_Text text;
-    C2D_TextParse(&text, textBuf_, items_[i].c_str());
-    C2D_TextOptimize(&text);
     const bool isSel = (i == selected_);
-    const std::string prefix = isSel ? "> " : "  ";
-    C2D_Text pfx;
-    C2D_TextParse(&pfx, textBuf_, prefix.c_str());
-    C2D_TextOptimize(&pfx);
+    // Draw the cursor, optional checkbox, and label as one line so the
+    // checkbox never collides with a fixed text offset.
+    std::string line = isSel ? "> " : "  ";
+    if (multiSelect_) {
+      const bool on = (static_cast<std::size_t>(i) < checked_.size()) && checked_[i];
+      line += on ? "[x] " : "[ ] ";
+    }
+    line += items_[i];
+    C2D_Text text;
+    C2D_TextParse(&text, textBuf_, line.c_str());
+    C2D_TextOptimize(&text);
     const u32 clr = isSel ? clrHi_ : clrText_;
-    C2D_DrawText(&pfx, C2D_WithColor, 8.0f, y, 0.0f, kTextScale, kTextScale, clr);
-    C2D_DrawText(&text, C2D_WithColor, 28.0f, y, 0.0f, kTextScale, kTextScale, clr);
+    C2D_DrawText(&text, C2D_WithColor, 8.0f, y, 0.0f, kTextScale, kTextScale, clr);
     y += kRowHeight;
   }
 

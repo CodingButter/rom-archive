@@ -90,7 +90,8 @@ int main() {
             for (const auto& f : item.files)
               rows.push_back(f.name + "  (" + bytesHuman(f.sizeBytes) + ")");
             ui.setList(std::move(rows));
-            ui.setStatus("A: plan all   B: back");
+            ui.setMultiSelect(true);
+            ui.setStatus("X: select  A: plan (all if none)  L/R: page  B: back");
             screen = Screen::Item;
           } else {
             screen = Screen::Error;
@@ -107,12 +108,23 @@ int main() {
           ui.setList(std::move(rows));
           ui.setStatus("A: open   START: quit");
           screen = Screen::Catalog;
+        } else if (ui.pressedX()) {
+          // Toggle the highlighted file into/out of the selection.
+          ui.toggleSelected();
         } else if (ui.pressedA()) {
-          // Ask the server to fit the whole item into the SD free space.
+          // Plan the checked subset, or the whole item when nothing is checked.
           DownloadPlanRequest req;
           req.id = item.id;
           req.freeSpaceBytes = sdFreeBytes();
-          req.selectedFileNames = std::nullopt;  // whole item
+          if (ui.anyChecked()) {
+            std::vector<std::string> chosen;
+            for (int i : ui.checkedIndices())
+              if (static_cast<std::size_t>(i) < item.files.size())
+                chosen.push_back(item.files[i].name);
+            req.selectedFileNames = std::move(chosen);
+          } else {
+            req.selectedFileNames = std::nullopt;  // whole item
+          }
           ui.setStatus("Planning...");
           ui.draw();
           if (auto p = api.fetchPlan(req)) {
@@ -143,7 +155,8 @@ int main() {
           for (const auto& f : item.files)
             rows.push_back(f.name + "  (" + bytesHuman(f.sizeBytes) + ")");
           ui.setList(std::move(rows));
-          ui.setStatus("A: plan all   B: back");
+          ui.setMultiSelect(true);
+          ui.setStatus("X: select  A: plan (all if none)  L/R: page  B: back");
           screen = Screen::Item;
         } else if (ui.pressedA() && !plan.files.empty()) {
           screen = Screen::Downloading;
