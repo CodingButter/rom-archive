@@ -85,14 +85,18 @@ int main() {
   QrCamera qrCamera;
   bool catalogLoaded = false;
   bool confirmFromScan = false;
+  int scanShownFrames = -1;
 
   // Load the catalog once up front so Browse is instant, then present the top
   // menu. A catalog failure is non-fatal here: Scan QR does not need it.
   ui.setStatus("Loading catalog...");
   ui.draw();
+  std::string catalogError;
   if (auto c = api.fetchCatalog()) {
     catalog = *c;
     catalogLoaded = !catalog.entries.empty();
+  } else {
+    catalogError = api.lastError();
   }
 
   auto showMenu = [&]() {
@@ -111,7 +115,9 @@ int main() {
             // Browse catalog.
             if (!catalogLoaded) {
               screen = Screen::Error;
-              errorMsg = "Failed to load catalog. Check the network.";
+              errorMsg = "Failed to load catalog." +
+                         (catalogError.empty() ? std::string(" Check the network.")
+                                               : " [" + catalogError + "]");
               break;
             }
             std::vector<std::string> rows;
@@ -124,10 +130,11 @@ int main() {
             ui.setList({});
             if (qrCamera.start()) {
               ui.setStatus("Aim the back camera at the QR code   B: cancel");
+              scanShownFrames = -1;
               screen = Screen::Scan;
             } else {
               screen = Screen::Error;
-              errorMsg = "Failed to open the camera.";
+              errorMsg = "Failed to open the camera. [" + qrCamera.lastError() + "]";
             }
           }
         }
@@ -156,7 +163,8 @@ int main() {
             // parse — all indistinguishable to the device, but distinct from a
             // successful resolve that happened to be empty.
             screen = Screen::Error;
-            errorMsg = "Could not reach the server to resolve that code.";
+            errorMsg = "Could not reach the server to resolve that code." +
+                       (api.lastError().empty() ? "" : " [" + api.lastError() + "]");
             break;
           }
           if (resolved->files.empty()) {
@@ -176,7 +184,13 @@ int main() {
         } else if (poll == QrPoll::Error) {
           qrCamera.stop();
           screen = Screen::Error;
-          errorMsg = "Camera error while scanning.";
+          errorMsg = "Camera error while scanning. [" + qrCamera.lastError() + "]";
+        } else if (qrCamera.framesReceived() != scanShownFrames) {
+          // Live capture telemetry: a rising frame count on the status line
+          // proves on-device that the capture is producing frames.
+          scanShownFrames = qrCamera.framesReceived();
+          ui.setStatus("Aim at the QR   frames: " + std::to_string(scanShownFrames) +
+                       "   B: cancel");
         }
         // QrPoll::NoCode: normal — keep polling.
         break;
@@ -200,7 +214,8 @@ int main() {
             screen = Screen::Item;
           } else {
             screen = Screen::Error;
-            errorMsg = "Failed to load item details.";
+            errorMsg = "Failed to load item details." +
+                       (api.lastError().empty() ? "" : " [" + api.lastError() + "]");
           }
         }
         break;
@@ -249,7 +264,8 @@ int main() {
             screen = Screen::Confirm;
           } else {
             screen = Screen::Error;
-            errorMsg = "Failed to build download plan.";
+            errorMsg = "Failed to build download plan." +
+                       (api.lastError().empty() ? "" : " [" + api.lastError() + "]");
           }
         }
         break;

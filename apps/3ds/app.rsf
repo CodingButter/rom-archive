@@ -1,7 +1,11 @@
 # makerom RSF for the ROM Archive CIA.
 # Kept lean: makerom's `-desc app:4` supplies the AccessControlInfo defaults, so
-# this RSF only declares title metadata + the unique id. UniqueId 0xFF3FE sits
-# in the homebrew test range (title id 0004000000FF3FE00).
+# this RSF only declares title metadata + the unique id.
+#
+# UniqueId history: 0xFF3FE (v1.0.0-v1.1.1) installed fine but never appeared
+# on the HOME menu (visible in FBI's title list, SMDH verified region-free +
+# visible flag). 0xF83DC moves into the same 0xF8xxx block as FBI itself
+# (0xF8001), which demonstrably displays — an A/B experiment for that bug.
 BasicInfo:
   Title                   : rom-archive
   CompanyCode             : "00"
@@ -10,7 +14,7 @@ BasicInfo:
 
 TitleInfo:
   Category                : Application
-  UniqueId                : 0xFF3FE
+  UniqueId                : 0xF83DC
 
 Option:
   UseOnSD                 : true

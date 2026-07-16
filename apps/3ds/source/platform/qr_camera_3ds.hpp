@@ -49,6 +49,12 @@ class QrCamera {
   // The decoded payload from the most recent Found poll().
   const std::string& payload() const { return payload_; }
 
+  // Diagnostics: which camera call failed (with its hex result code), and how
+  // many frames have completed since start(). Surfaced in the UI so on-device
+  // failures report the actual failing stage instead of a generic message.
+  const std::string& lastError() const { return lastError_; }
+  int framesReceived() const { return framesReceived_; }
+
   // The most recent completed frame (RGB565, width()*height() pixels), for a
   // live viewfinder. Null until the first frame arrives.
   const std::uint16_t* frame() const {
@@ -92,10 +98,18 @@ class QrCamera {
   std::uint32_t recvEvent_ = 0;
   std::uint32_t transferUnit_ = 0;
 
+  // The port's buffer-error interrupt event. With continuous capture, the port
+  // wedges whenever a frame completes while no receive is armed; this event is
+  // how the wedge is detected (and recovered from) immediately.
+  std::uint32_t bufErrEvent_ = 0;
+
   // Consecutive poll() timeouts since the last good frame, and how many
   // clear+restart recoveries have been attempted without one.
   int timeouts_ = 0;
   int recoveries_ = 0;
+
+  std::string lastError_;
+  int framesReceived_ = 0;
 };
 
 }  // namespace rom_archive

@@ -149,6 +149,10 @@ void Ui::drawScan(const std::uint16_t* frame, bool newFrame) {
         dst[dstPos] = frame[srcRow + x];
       }
     }
+    // The swizzle above wrote through the CPU cache; the GPU reads physical
+    // memory. Without this flush the GPU samples stale/partial lines — the
+    // classic "single garbled frame" symptom.
+    GSPGPU_FlushDataCache(scanTex_.data, kTexW * kTexH * 2);
   }
 
   C3D_FrameBegin(C3D_FRAME_SYNCDRAW);

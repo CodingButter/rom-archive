@@ -6,6 +6,7 @@
 #include <3ds.h>
 
 #include <cstdint>
+#include <cstdio>
 #include <vector>
 
 namespace rom_archive {
@@ -14,6 +15,12 @@ namespace {
 
 constexpr std::size_t kChunkSize = 16 * 1024;  // 16 KiB read window
 constexpr std::uint32_t kMaxRedirects = 8;
+
+std::string hexResult(Result rc) {
+  char buf[16];
+  std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(rc));
+  return buf;
+}
 
 // Drive one httpc context through connection + redirect follow, then stream the
 // body. On a 3xx with a Location, the context is torn down and reopened against
@@ -33,8 +40,9 @@ HttpResult run(std::string url, const ChunkSink& onChunk, const char* contentTyp
     httpcContext ctx;
     HTTPC_RequestMethod method = postBody ? HTTPC_METHOD_POST : HTTPC_METHOD_GET;
 
-    if (R_FAILED(httpcOpenContext(&ctx, method, url.c_str(), 1))) {
-      result.error = "httpcOpenContext failed";
+    Result rc = httpcOpenContext(&ctx, method, url.c_str(), 1);
+    if (R_FAILED(rc)) {
+      result.error = "open " + hexResult(rc);
       return result;
     }
 
@@ -51,16 +59,20 @@ HttpResult run(std::string url, const ChunkSink& onChunk, const char* contentTyp
                           static_cast<u32>(postBody->size()));
     }
 
-    if (R_FAILED(httpcBeginRequest(&ctx))) {
+    rc = httpcBeginRequest(&ctx);
+    if (R_FAILED(rc)) {
       httpcCloseContext(&ctx);
-      result.error = "httpcBeginRequest failed";
+      result.error = "begin " + hexResult(rc);
       return result;
     }
 
+    // This is where TLS handshake / connection failures surface with httpc:
+    // the request "begins" fine and the failure lands on the first read.
     u32 statusCode = 0;
-    if (R_FAILED(httpcGetResponseStatusCode(&ctx, &statusCode))) {
+    rc = httpcGetResponseStatusCode(&ctx, &statusCode);
+    if (R_FAILED(rc)) {
       httpcCloseContext(&ctx);
-      result.error = "httpcGetResponseStatusCode failed";
+      result.error = "status " + hexResult(rc);
       return result;
     }
     result.statusCode = static_cast<int>(statusCode);
@@ -80,7 +92,7 @@ HttpResult run(std::string url, const ChunkSink& onChunk, const char* contentTyp
 
     if (statusCode < 200 || statusCode >= 300) {
       httpcCloseContext(&ctx);
-      result.error = "non-2xx status";
+      result.error = "HTTP " + std::to_string(statusCode);
       return result;
     }
 
@@ -89,8 +101,7 @@ HttpResult run(std::string url, const ChunkSink& onChunk, const char* contentTyp
     std::vector<std::uint8_t> buf(kChunkSize);
     for (;;) {
       u32 readLen = 0;
-      Result rc =
-          httpcDownloadData(&ctx, buf.data(), static_cast<u32>(buf.size()), &readLen);
+      rc = httpcDownloadData(&ctx, buf.data(), static_cast<u32>(buf.size()), &readLen);
 
       if (readLen > 0) {
         if (!onChunk(buf.data(), readLen)) {
@@ -105,7 +116,7 @@ HttpResult run(std::string url, const ChunkSink& onChunk, const char* contentTyp
       }
       if (R_FAILED(rc)) {
         httpcCloseContext(&ctx);
-        result.error = "httpcDownloadData failed";
+        result.error = "read " + hexResult(rc);
         return result;
       }
       break;  // rc == 0: transfer complete
@@ -135,6 +146,7 @@ bool Http3ds::getString(const std::string& url, std::string& out) {
         return true;
       },
       nullptr, nullptr);
+  lastError_ = r.ok ? "" : r.error;
   return r.ok;
 }
 
@@ -147,6 +159,7 @@ bool Http3ds::postJson(const std::string& url, const std::string& body, std::str
         return true;
       },
       "application/json", &body);
+  lastError_ = r.ok ? "" : r.error;
   return r.ok;
 }
 

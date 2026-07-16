@@ -36,17 +36,23 @@ jobs:
           chmod +x apps/3ds/build.sh
           API_BASE_URL="$API_BASE_URL" KEEP_ARTIFACTS=1 apps/3ds/build.sh --check
 
-      - name: Upload CIA as a workflow artifact
+      - name: Upload CIA + 3DSX as workflow artifacts
         uses: actions/upload-artifact@v4
         with:
           name: rom-archive-cia
-          path: apps/3ds/rom-archive.cia
+          path: |
+            apps/3ds/rom-archive.cia
+            apps/3ds/rom-archive.3dsx
           if-no-files-found: error
 
-      - name: Publish GitHub Release with the CIA attached
+      # The .3dsx ships alongside the .cia so the app is testable through the
+      # Homebrew Launcher even when a CIA install is unavailable or suspect.
+      - name: Publish GitHub Release with the CIA + 3DSX attached
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: apps/3ds/rom-archive.cia
+          files: |
+            apps/3ds/rom-archive.cia
+            apps/3ds/rom-archive.3dsx
           fail_on_unmatched_files: true
           generate_release_notes: true

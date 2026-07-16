@@ -33,6 +33,10 @@ class ApiClient {
   // The transport, exposed so the download orchestrator can stream ROM bytes.
   Http3ds& http() { return http_; }
 
+  // Failure detail of the most recent unsuccessful API call (transport stage +
+  // hex result code, or HTTP status), for on-screen diagnostics.
+  const std::string& lastError() const { return http_.lastError(); }
+
  private:
   std::string baseUrl_;
   Http3ds http_;

@@ -16,9 +16,17 @@
 
 #include "quirc.h"
 
+#include <cstdio>
+
 namespace rom_archive {
 
 namespace {
+
+std::string hexResult(Result rc) {
+  char buf[16];
+  std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(rc));
+  return buf;
+}
 constexpr int kWidth = QrCamera::width();
 constexpr int kHeight = QrCamera::height();
 constexpr u32 kBufSize = kWidth * kHeight * 2;  // RGB565 = 2 bytes/pixel
@@ -39,11 +47,17 @@ QrCamera::~QrCamera() { stop(); }
 
 bool QrCamera::start() {
   if (running_) return true;
+  lastError_.clear();
+  framesReceived_ = 0;
 
   struct quirc* q = quirc_new();
-  if (!q) return false;
+  if (!q) {
+    lastError_ = "quirc_new failed";
+    return false;
+  }
   if (quirc_resize(q, kWidth, kHeight) < 0) {
     quirc_destroy(q);
+    lastError_ = "quirc_resize failed";
     return false;
   }
   quirc_ = q;
@@ -52,42 +66,64 @@ bool QrCamera::start() {
   if (!camBuf_) {
     quirc_destroy(q);
     quirc_ = nullptr;
+    lastError_ = "linearAlloc failed";
     return false;
   }
 
-  if (R_FAILED(camInit())) {
+  Result rc = camInit();
+  if (R_FAILED(rc)) {
     linearFree(camBuf_);
     camBuf_ = nullptr;
     quirc_destroy(q);
     quirc_ = nullptr;
+    lastError_ = "camInit " + hexResult(rc);
     return false;
   }
 
   // Configure the outer camera, disable trimming (without this the transfer
   // geometry can mismatch and the receive never completes), size the transfer,
-  // arm the first receive, then start capture. Any failure tears down.
+  // arm the first receive, then start capture. Any failure tears down and
+  // records WHICH call failed with its result code.
+  auto step = [this](const char* name, Result r) {
+    if (R_FAILED(r)) {
+      lastError_ = std::string(name) + " " + hexResult(r);
+      return false;
+    }
+    return true;
+  };
+
   bool ok = true;
-  ok = ok && R_SUCCEEDED(CAMU_SetSize(SELECT_OUT1, SIZE_CTR_TOP_LCD, CONTEXT_A));
-  ok = ok && R_SUCCEEDED(CAMU_SetOutputFormat(SELECT_OUT1, OUTPUT_RGB_565, CONTEXT_A));
-  ok = ok && R_SUCCEEDED(CAMU_SetFrameRate(SELECT_OUT1, FRAME_RATE_30));
-  ok = ok && R_SUCCEEDED(CAMU_SetNoiseFilter(SELECT_OUT1, true));
-  ok = ok && R_SUCCEEDED(CAMU_SetAutoExposure(SELECT_OUT1, true));
-  ok = ok && R_SUCCEEDED(CAMU_SetAutoWhiteBalance(SELECT_OUT1, true));
-  ok = ok && R_SUCCEEDED(CAMU_Activate(SELECT_OUT1));
-  ok = ok && R_SUCCEEDED(CAMU_SetTrimming(PORT_CAM1, false));
+  ok = ok && step("SetSize", CAMU_SetSize(SELECT_OUT1, SIZE_CTR_TOP_LCD, CONTEXT_A));
+  ok = ok && step("SetOutputFormat",
+                  CAMU_SetOutputFormat(SELECT_OUT1, OUTPUT_RGB_565, CONTEXT_A));
+  ok = ok && step("SetFrameRate", CAMU_SetFrameRate(SELECT_OUT1, FRAME_RATE_30));
+  ok = ok && step("SetNoiseFilter", CAMU_SetNoiseFilter(SELECT_OUT1, true));
+  ok = ok && step("SetAutoExposure", CAMU_SetAutoExposure(SELECT_OUT1, true));
+  ok = ok && step("SetAutoWhiteBalance", CAMU_SetAutoWhiteBalance(SELECT_OUT1, true));
+  ok = ok && step("Activate", CAMU_Activate(SELECT_OUT1));
+  ok = ok && step("SetTrimming", CAMU_SetTrimming(PORT_CAM1, false));
 
   u32 transferUnit = 0;
-  ok = ok && R_SUCCEEDED(CAMU_GetMaxBytes(&transferUnit, kWidth, kHeight));
-  ok = ok && R_SUCCEEDED(CAMU_SetTransferBytes(PORT_CAM1, transferUnit, kWidth, kHeight));
-  ok = ok && R_SUCCEEDED(CAMU_ClearBuffer(PORT_CAM1));
+  ok = ok && step("GetMaxBytes", CAMU_GetMaxBytes(&transferUnit, kWidth, kHeight));
+  ok = ok && step("SetTransferBytes",
+                  CAMU_SetTransferBytes(PORT_CAM1, transferUnit, kWidth, kHeight));
+  ok = ok && step("ClearBuffer", CAMU_ClearBuffer(PORT_CAM1));
+
+  // The buffer-error interrupt: signaled when the port wedges (a frame
+  // completed while no receive was armed). poll() watches it to restart the
+  // capture immediately instead of stalling.
+  Handle bufErr = 0;
+  ok = ok && step("GetBufferErrorInterruptEvent",
+                  CAMU_GetBufferErrorInterruptEvent(&bufErr, PORT_CAM1));
 
   Handle ev = 0;
-  ok = ok && R_SUCCEEDED(CAMU_SetReceiving(&ev, camBuf_, PORT_CAM1, kBufSize,
-                                           static_cast<s16>(transferUnit)));
-  ok = ok && R_SUCCEEDED(CAMU_StartCapture(PORT_CAM1));
+  ok = ok && step("SetReceiving", CAMU_SetReceiving(&ev, camBuf_, PORT_CAM1, kBufSize,
+                                                    static_cast<s16>(transferUnit)));
+  ok = ok && step("StartCapture", CAMU_StartCapture(PORT_CAM1));
 
   if (!ok) {
     if (ev) svcCloseHandle(ev);
+    if (bufErr) svcCloseHandle(bufErr);
     shutdownCamera();
     quirc_destroy(q);
     quirc_ = nullptr;
@@ -95,6 +131,7 @@ bool QrCamera::start() {
   }
 
   recvEvent_ = ev;
+  bufErrEvent_ = bufErr;
   transferUnit_ = transferUnit;
   frameCopy_.clear();
   newFrame_ = false;
@@ -112,19 +149,51 @@ QrPoll QrCamera::poll() {
   // Wait (bounded) on the receive that was armed at start() or by the
   // previous completed frame.
   if (R_FAILED(svcWaitSynchronization(recvEvent_, kWaitTimeoutNs))) {
-    // No frame this tick. Occasional timeouts are normal right after start;
-    // a long run of them means the transfer wedged — clear and restart the
-    // capture. Only after that recovery repeatedly fails is the camera
-    // declared unusable.
-    if (++timeouts_ >= kTimeoutsBeforeRecovery) {
-      timeouts_ = 0;
-      if (++recoveries_ > kMaxRecoveries) return QrPoll::Error;
+    // No frame this tick. First check the buffer-error interrupt: with
+    // continuous capture the port wedges whenever a frame completes while no
+    // receive is armed (routine — it can happen every frame boundary), and
+    // once wedged it never signals the receive again. Recover immediately:
+    // stop, clear, re-arm, restart. This is the FBI/Anemone pattern and is
+    // NOT counted as a failure.
+    if (bufErrEvent_ &&
+        R_SUCCEEDED(svcWaitSynchronization(bufErrEvent_, 0))) {
+      svcClearEvent(bufErrEvent_);
       svcCloseHandle(recvEvent_);
       recvEvent_ = 0;
+      CAMU_StopCapture(PORT_CAM1);
       CAMU_ClearBuffer(PORT_CAM1);
       Handle ev = 0;
-      if (R_FAILED(CAMU_SetReceiving(&ev, camBuf_, PORT_CAM1, kBufSize,
-                                     static_cast<s16>(transferUnit_)))) {
+      Result rc = CAMU_SetReceiving(&ev, camBuf_, PORT_CAM1, kBufSize,
+                                    static_cast<s16>(transferUnit_));
+      if (R_FAILED(rc)) {
+        lastError_ = "re-arm SetReceiving " + hexResult(rc);
+        return QrPoll::Error;
+      }
+      recvEvent_ = ev;
+      CAMU_StartCapture(PORT_CAM1);
+      timeouts_ = 0;
+      return QrPoll::NoCode;
+    }
+
+    // A long run of silent timeouts (no buffer error, no frames) means the
+    // transfer wedged some other way — clear and restart the capture. Only
+    // after that recovery repeatedly fails is the camera declared unusable.
+    if (++timeouts_ >= kTimeoutsBeforeRecovery) {
+      timeouts_ = 0;
+      if (++recoveries_ > kMaxRecoveries) {
+        lastError_ = "no frames after " + std::to_string(kMaxRecoveries) +
+                     " capture restarts";
+        return QrPoll::Error;
+      }
+      svcCloseHandle(recvEvent_);
+      recvEvent_ = 0;
+      CAMU_StopCapture(PORT_CAM1);
+      CAMU_ClearBuffer(PORT_CAM1);
+      Handle ev = 0;
+      Result rc = CAMU_SetReceiving(&ev, camBuf_, PORT_CAM1, kBufSize,
+                                    static_cast<s16>(transferUnit_));
+      if (R_FAILED(rc)) {
+        lastError_ = "recovery SetReceiving " + hexResult(rc);
         return QrPoll::Error;
       }
       recvEvent_ = ev;
@@ -139,12 +208,15 @@ QrPoll QrCamera::poll() {
   recvEvent_ = 0;
   frameCopy_.assign(camBuf_, camBuf_ + kWidth * kHeight);
   newFrame_ = true;
+  ++framesReceived_;
   timeouts_ = 0;
   recoveries_ = 0;
 
   Handle ev = 0;
-  if (R_FAILED(CAMU_SetReceiving(&ev, camBuf_, PORT_CAM1, kBufSize,
-                                 static_cast<s16>(transferUnit_)))) {
+  Result rearmRc = CAMU_SetReceiving(&ev, camBuf_, PORT_CAM1, kBufSize,
+                                     static_cast<s16>(transferUnit_));
+  if (R_FAILED(rearmRc)) {
+    lastError_ = "next-frame SetReceiving " + hexResult(rearmRc);
     return QrPoll::Error;
   }
   recvEvent_ = ev;
@@ -200,6 +272,10 @@ void QrCamera::shutdownCamera() {
   if (recvEvent_) {
     svcCloseHandle(recvEvent_);
     recvEvent_ = 0;
+  }
+  if (bufErrEvent_) {
+    svcCloseHandle(bufErrEvent_);
+    bufErrEvent_ = 0;
   }
   if (camBuf_) {
     linearFree(camBuf_);
