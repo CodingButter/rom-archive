@@ -5,9 +5,12 @@
 //
 //   Catalog -> Item -> Confirm plan (with SD free space) -> Download -> Done
 //
-// Bytes are never proxied through the API: the plan lists direct download URLs,
-// and downloadPlan() streams each straight from the source to the SD card while
-// verifying MD5 on the fly.
+// downloadPlan() streams each ROM straight to the SD card while verifying MD5
+// on the fly. ROM bytes ride through the API's /dl proxy (the 3DS SSL module
+// cannot handshake archive.org's modern-cipher data nodes), so the URLs in the
+// plan are already rewritten to the proxy. archive.org serves the No-Intro sets
+// as one .zip per game; after a verified download this app extracts the raw ROM
+// so TWiLight Menu++ (which cannot read archives) sees a playable .sfc/.gba/etc.
 #include <3ds.h>
 
 #include <algorithm>
@@ -18,6 +21,7 @@
 #include "platform/file_sink_3ds.hpp"
 #include "platform/qr_camera_3ds.hpp"
 #include "platform/ui.hpp"
+#include "platform/zip_extract_3ds.hpp"
 #include "rom_archive/contract.hpp"
 #include "rom_archive/download.hpp"
 #include "rom_archive/json.hpp"
@@ -49,6 +53,13 @@ DownloadPlanResponse planFromResolve(const ResolveResponse& r) {
     plan.files.push_back(std::move(pf));
   }
   return plan;
+}
+
+bool endsWithZipCI(const std::string& s) {
+  if (s.size() < 4) return false;
+  const std::string ext = s.substr(s.size() - 4);
+  return (ext[0] == '.') && (ext[1] == 'z' || ext[1] == 'Z') &&
+         (ext[2] == 'i' || ext[2] == 'I') && (ext[3] == 'p' || ext[3] == 'P');
 }
 
 std::string bytesHuman(std::int64_t bytes) {
@@ -336,6 +347,36 @@ int main() {
               },
               [&] { return cancelRequested; });
           ui.clearProgress();
+
+          // archive.org ships the No-Intro sets as one .zip per game, but
+          // TWiLight Menu++ cannot read archives — it needs the extracted ROM.
+          // For every verified .zip, extract the raw ROM beside it and drop the
+          // archive; on success the row now names the playable file. A failed
+          // extraction leaves the verified zip in place and is surfaced as an
+          // error so the user knows to extract it manually.
+          {
+            std::size_t zipTotal = 0, zipDone = 0;
+            for (const auto& r : report.files)
+              if (r.status == DownloadStatus::Ok && endsWithZipCI(r.targetPath))
+                ++zipTotal;
+            for (auto& r : report.files) {
+              if (r.status != DownloadStatus::Ok || !endsWithZipCI(r.targetPath))
+                continue;
+              ui.setStatus("Extracting " + std::to_string(++zipDone) + "/" +
+                           std::to_string(zipTotal) + "  " + r.name);
+              ui.draw();
+              ZipExtractResult ex = extractRomZip(r.targetPath);
+              if (ex.ok) {
+                r.targetPath = ex.romPath;
+                const std::size_t slash = ex.romPath.find_last_of('/');
+                r.name = slash == std::string::npos ? ex.romPath
+                                                    : ex.romPath.substr(slash + 1);
+              } else {
+                r.status = DownloadStatus::WriteError;
+                r.detail = "extract failed: " + ex.error;
+              }
+            }
+          }
 
           bool anyCancelled = false;
           std::string firstFailure;

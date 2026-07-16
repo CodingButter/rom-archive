@@ -22,9 +22,9 @@ include $(DEVKITARM)/3ds_rules
 #---------------------------------------------------------------------------------
 TARGET		:=	rom-archive
 BUILD		:=	build
-SOURCES		:=	source source/platform source/vendor/quirc core/src
+SOURCES		:=	source source/platform source/vendor/quirc source/vendor/miniz core/src
 DATA		:=	data
-INCLUDES	:=	include source source/vendor/quirc core/include
+INCLUDES	:=	include source source/vendor/quirc source/vendor/miniz core/include
 GRAPHICS	:=	gfx
 GFXBUILD	:=	$(BUILD)
 
@@ -54,6 +54,11 @@ CFLAGS	+=	$(INCLUDE) -D__3DS__ -DAPI_BASE_URL='"$(API_BASE_URL)"'
 # Vendored quirc tuning: single-precision FPU on the 3DS, small region cap for
 # the embedded memory budget (see source/vendor/quirc/VERSION.md).
 CFLAGS	+=	-DQUIRC_FLOAT_TYPE=float -DQUIRC_MAX_REGIONS=254
+
+# Vendored miniz: we only read ZIPs from an in-memory buffer and extract to a
+# heap buffer, so disable stdio/file, all writing APIs, and time handling — this
+# trims the build and drops the libc time.h dependency (see vendor/miniz/LICENSE).
+CFLAGS	+=	-DMINIZ_NO_STDIO -DMINIZ_NO_TIME -DMINIZ_NO_ARCHIVE_WRITING_APIS
 
 # The core is C++17. Exceptions are kept off (the on-device code paths do not
 # throw); RTTI stays off to match the platform ABI.
