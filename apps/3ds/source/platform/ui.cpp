@@ -173,14 +173,35 @@ void Ui::drawScan(const std::uint16_t* frame, bool newFrame) {
 }
 
 void Ui::drawStatus() {
-  // Bottom screen: the status line.
+  // Bottom screen: the status text, word-wrapped so long diagnostics (result
+  // codes, failing stages) stay fully readable instead of running off the
+  // right edge. 42 chars is a conservative fit for the 320px screen at the
+  // proportional system font's 0.6 scale.
+  constexpr std::size_t kWrapCols = 42;
+  constexpr int kMaxLines = 14;
+
   C2D_TargetClear(bottom_, clrBg_);
   C2D_SceneBegin(bottom_);
-  if (!status_.empty()) {
+  if (status_.empty()) return;
+
+  float y = 8.0f;
+  std::size_t pos = 0;
+  for (int line = 0; line < kMaxLines && pos < status_.size(); ++line) {
+    std::size_t take = std::min(kWrapCols, status_.size() - pos);
+    // Prefer breaking at the last space inside the window (unless the rest
+    // fits anyway), so words and hex codes stay whole when possible.
+    if (pos + take < status_.size()) {
+      const std::size_t space = status_.rfind(' ', pos + take);
+      if (space != std::string::npos && space > pos) take = space - pos;
+    }
+    const std::string chunk = status_.substr(pos, take);
     C2D_Text st;
-    C2D_TextParse(&st, textBuf_, status_.c_str());
+    C2D_TextParse(&st, textBuf_, chunk.c_str());
     C2D_TextOptimize(&st);
-    C2D_DrawText(&st, C2D_WithColor, 8.0f, 8.0f, 0.0f, kTextScale, kTextScale, clrText_);
+    C2D_DrawText(&st, C2D_WithColor, 8.0f, y, 0.0f, kTextScale, kTextScale, clrText_);
+    y += kRowHeight;
+    pos += take;
+    while (pos < status_.size() && status_[pos] == ' ') ++pos;  // eat the break
   }
 }
 

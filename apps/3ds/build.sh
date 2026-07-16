@@ -45,7 +45,7 @@ docker -H "$DOCKER_HOST_SOCK" run --rm \
   -e KEEP_ARTIFACTS="${KEEP_ARTIFACTS:-1}" \
   -e CLEAN="${CLEAN:-0}" \
   -e CHECK="$CHECK" \
-  -e API_BASE_URL="${API_BASE_URL:-https://rom-archive-api.example}" \
+  -e API_BASE_URL="${API_BASE_URL:-http://rom-archive-api.jamie337nichols.workers.dev}" \
   -v "$REPO_ROOT":/work -w /work/apps/3ds \
   "$IMAGE" bash -lc '
 set -euo pipefail
@@ -56,21 +56,11 @@ echo "[build] make (.elf/.3dsx/.smdh), API_BASE_URL=$API_BASE_URL ..."
 make clean >/dev/null 2>&1 || true
 make API_BASE_URL="$API_BASE_URL"
 
-echo "[build] generate placeholder banner image + silent audio ..."
+# banner.png is a committed asset (regenerate with tools/make_banner.py);
+# only the silent audio track is synthesized here.
+echo "[build] generate silent banner audio ..."
 python3 - <<PY
-import struct, zlib
-
-def png_solid(path, w, h, rgb):
-    def chunk(tag, data):
-        c = tag + data
-        return struct.pack(">I", len(data)) + c + struct.pack(">I", zlib.crc32(c) & 0xffffffff)
-    raw = bytearray()
-    row = bytes(rgb) * w
-    for _ in range(h):
-        raw += b"\x00" + row
-    ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
-    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + chunk(b"IEND", b"")
-    open(path, "wb").write(png)
+import struct
 
 def wav_silence(path, seconds=1, rate=22050):
     n = int(seconds * rate)
@@ -80,9 +70,8 @@ def wav_silence(path, seconds=1, rate=22050):
     hdr += b"data" + struct.pack("<I", len(data))
     open(path, "wb").write(hdr + data)
 
-png_solid("banner.png", 256, 128, (32, 96, 160))
 wav_silence("banner.wav", 1)
-print("banner.png + banner.wav written")
+print("banner.wav written")
 PY
 
 echo "[build] bannertool makebanner (.bnr) ..."
@@ -110,8 +99,8 @@ makerom -f cia -target t -exefslogo -desc app:4 \
   -rsf app.rsf \
   -o "$TARGET.cia"
 
-# Remove the transient banner inputs (never part of the deliverable).
-rm -f banner.png banner.wav "$TARGET.bnr" "$TARGET-cia.smdh"
+# Remove the transient inputs (banner.png is a committed asset — keep it).
+rm -f banner.wav "$TARGET.bnr" "$TARGET-cia.smdh"
 
 echo "[build] artifacts:"
 ls -la "$TARGET.3dsx" "$TARGET.cia"

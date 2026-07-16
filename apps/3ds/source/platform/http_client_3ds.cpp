@@ -26,12 +26,16 @@ std::string hexResult(Result rc) {
 // body. On a 3xx with a Location, the context is torn down and reopened against
 // the new URL (libctru does not transparently follow redirects).
 //
-// TLS peer verification is disabled for ALL requests: the 3DS's frozen root-CA
-// store cannot validate modern certificate chains (archive.org, vercel.app, or
-// most of today's web). ROM bytes remain integrity-checked by the mandatory MD5
-// verification; trusting API metadata over an unverified channel is a documented
-// tradeoff and standard practice in 3DS homebrew (FBI, Anemone3DS, and
-// Universal-Updater all disable verification for the same reason).
+// TLS peer verification is disabled for ALL https requests: the 3DS's frozen
+// root-CA store cannot validate modern certificate chains. Note DisableVerify
+// only skips chain validation — it cannot rescue a host whose TLS config has
+// no cipher overlap with the 3DS SSL module (no ECDHE/GCM on 3DS). Vercel is
+// such a host (handshake alert 40 -> httpc 0xD8A0A03C "cert verify failed"),
+// which is why the API is reached over plain HTTP via a Cloudflare Worker
+// proxy, while archive.org ROM downloads work over TLS (it still offers
+// RSA/CBC suites). ROM bytes remain integrity-checked by the mandatory MD5
+// verification; this is the standard 3DS homebrew tradeoff (FBI, Anemone3DS,
+// Universal-Updater).
 HttpResult run(std::string url, const ChunkSink& onChunk, const char* contentType,
                const std::string* postBody) {
   HttpResult result{false, 0, ""};

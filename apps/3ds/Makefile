@@ -32,8 +32,13 @@ APP_TITLE       := ROM Archive
 APP_DESCRIPTION := Download homebrew ROMs to TWiLight Menu++
 APP_AUTHOR      := rom-archive
 
-# The API the on-device app talks to. Overridable at build time.
-API_BASE_URL    ?= https://rom-archive-api.example
+# The API the on-device app talks to. Overridable at build time. Plain HTTP by
+# design: the 3DS SSL module shares no cipher suite with Vercel's TLS endpoint
+# (no ECDHE/GCM on 3DS -> handshake alert 40 -> httpc 0xD8A0A03C), so the API
+# is fronted by a Cloudflare Worker proxy reachable over HTTP. ROM downloads
+# still go to archive.org over TLS (it accepts the 3DS's legacy RSA/CBC
+# ciphers) and every ROM is MD5-verified after download.
+API_BASE_URL    ?= http://rom-archive-api.jamie337nichols.workers.dev
 
 #---------------------------------------------------------------------------------
 # options for code generation

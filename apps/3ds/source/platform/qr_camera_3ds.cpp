@@ -202,10 +202,15 @@ QrPoll QrCamera::poll() {
     return QrPoll::NoCode;
   }
 
-  // Frame complete. Snapshot it (the re-armed DMA below will start overwriting
-  // camBuf_), then immediately arm the next receive so capture never stalls.
+  // Frame complete. The camera DMA wrote straight to memory, bypassing the CPU
+  // data cache — invalidate the buffer's cache lines first, or the CPU keeps
+  // re-reading the stale lines it cached on the first frame (the on-device
+  // symptom: one glitched still image forever while frames keep arriving).
+  // Then snapshot (the re-armed DMA below will start overwriting camBuf_) and
+  // immediately arm the next receive so capture never stalls.
   svcCloseHandle(recvEvent_);
   recvEvent_ = 0;
+  GSPGPU_InvalidateDataCache(camBuf_, kBufSize);
   frameCopy_.assign(camBuf_, camBuf_ + kWidth * kHeight);
   newFrame_ = true;
   ++framesReceived_;
