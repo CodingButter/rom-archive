@@ -38,6 +38,13 @@ class ApiClient {
   const std::string& lastError() const { return http_.lastError(); }
 
  private:
+  // Rewrite an archive.org download URL to route through the API's /dl proxy so
+  // the console fetches ROM bytes over plain HTTP. archive.org's /download/ path
+  // 302-redirects to a modern-cipher-only data node the 3DS cannot TLS-
+  // handshake (httpc 0xD8A0A03C); the proxy does that handshake server-side.
+  // Non-archive.org URLs are returned unchanged.
+  std::string proxyDownloadUrl(const std::string& url) const;
+
   std::string baseUrl_;
   Http3ds http_;
 };
