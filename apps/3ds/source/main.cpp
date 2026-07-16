@@ -151,9 +151,17 @@ int main() {
           ui.setStatus("Resolving...");
           ui.draw();
           auto resolved = api.resolveScan(*pointer);
-          if (!resolved || resolved->files.empty()) {
+          if (!resolved) {
+            // POST failed, the server returned an error, or the body did not
+            // parse — all indistinguishable to the device, but distinct from a
+            // successful resolve that happened to be empty.
             screen = Screen::Error;
-            errorMsg = "That code did not resolve to any files.";
+            errorMsg = "Could not reach the server to resolve that code.";
+            break;
+          }
+          if (resolved->files.empty()) {
+            screen = Screen::Error;
+            errorMsg = "That code resolved to no files.";
             break;
           }
           plan = planFromResolve(*resolved);

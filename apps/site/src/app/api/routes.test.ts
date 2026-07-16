@@ -286,6 +286,11 @@ describe("POST /api/resolve", () => {
     expect(parsed.id).toBe("gbahomebrew");
     expect(parsed.console).toBe("gba");
     expect(parsed.files).toHaveLength(10);
+    // totalBytes is the sum of the file sizes — the device trusts this figure
+    // directly (it computes nothing itself), so pin the invariant here.
+    expect(parsed.totalBytes).toBe(
+      parsed.files.reduce((sum, f) => sum + f.sizeBytes, 0),
+    );
     // metadata only — never a ROM byte or cover image
     expect(calls.some((u) => u.includes("/download/"))).toBe(false);
     expect(calls.some((u) => u.includes("thumbnails.libretro.com"))).toBe(false);

@@ -303,7 +303,21 @@ TEST_CASE("parseResolveResponse rejects unknown console and missing fields") {
                   R"({"id":"x","console":"dreamcast","totalBytes":0,"files":[]})")
                   .has_value());
   CHECK_FALSE(parseResolveResponse(R"({"id":"x","console":"gba"})").has_value());  // no files
+  // files present but not an array — pin the shape both backends must reject.
+  CHECK_FALSE(parseResolveResponse(
+                  R"({"id":"x","console":"gba","totalBytes":0,"files":{}})")
+                  .has_value());
   CHECK_FALSE(parseResolveResponse("{ not json").has_value());
+}
+
+TEST_CASE("parseResolveResponse accepts an empty file list") {
+  // An empty files array is a well-formed response (the device guards against
+  // acting on it separately); this pins that it is not treated as malformed.
+  const auto parsed =
+      parseResolveResponse(R"({"id":"x","console":"gba","totalBytes":0,"files":[]})");
+  REQUIRE(parsed.has_value());
+  CHECK(parsed->files.empty());
+  CHECK(parsed->console == Console::Gba);
 }
 
 // ---------------------------------------------------------------------------

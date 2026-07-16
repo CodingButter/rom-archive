@@ -162,7 +162,13 @@ std::optional<ResolveResponse> parseResolveResponse(const std::string& text) {
     out.id = reqStr(j, "id");
     out.console = reqConsole(j, "console");
     out.totalBytes = reqInt(j, "totalBytes");
-    for (const auto& f : j.at("files")) out.files.push_back(parseResolvedFile(f));
+    // Require files to be an array. Without this, range-for over a JSON *object*
+    // would iterate its values and silently accept `"files":{}` — the device
+    // (jansson) backend rejects non-arrays via json_is_array, so guard here to
+    // keep the two backends byte-for-byte identical in what they accept.
+    const auto& files = j.at("files");
+    if (!files.is_array()) return std::nullopt;
+    for (const auto& f : files) out.files.push_back(parseResolvedFile(f));
     return out;
   } catch (const std::exception&) {
     return std::nullopt;
