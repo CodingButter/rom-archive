@@ -1,0 +1,23 @@
+{
+  "id": "gbahomebrew",
+  "console": "gba",
+  "totalBytes": 3145728,
+  "files": [
+    {
+      "name": "Metroid Fusion (USA).gba",
+      "sizeBytes": 2097152,
+      "md5": "0123456789abcdef0123456789abcdef",
+      "downloadUrl": "https://archive.org/download/gbahomebrew/Metroid%20Fusion%20(USA).gba",
+      "targetPath": "roms/gba/Metroid Fusion (USA).gba",
+      "coverUrl": "https://raw.githubusercontent.com/libretro-thumbnails/Nintendo_-_Game_Boy_Advance/master/Named_Boxarts/Metroid%20Fusion%20(USA).png",
+      "coverTargetPath": "roms/gba/Metroid Fusion (USA).png"
+    },
+    {
+      "name": "Unlabeled Homebrew.gba",
+      "sizeBytes": 1048576,
+      "md5": "fedcba9876543210fedcba9876543210",
+      "downloadUrl": "https://archive.org/download/gbahomebrew/Unlabeled%20Homebrew.gba",
+      "targetPath": "roms/gba/Unlabeled Homebrew.gba"
+    }
+  ]
+}

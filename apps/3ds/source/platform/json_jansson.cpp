@@ -93,6 +93,30 @@ ExcludedFile parseExcluded(json_t* j, bool& ok) {
   return e;
 }
 
+// Read an optional string field: absent/null -> leave unset; present but
+// non-string -> mark not-ok. Never sets ok back to true.
+std::optional<std::string> optStr(json_t* obj, const char* key, bool& ok) {
+  json_t* v = json_object_get(obj, key);
+  if (!v || json_is_null(v)) return std::nullopt;
+  if (!json_is_string(v)) {
+    ok = false;
+    return std::nullopt;
+  }
+  return std::string(json_string_value(v));
+}
+
+ResolvedFile parseResolvedFile(json_t* j, bool& ok) {
+  ResolvedFile f;
+  f.name = reqStr(j, "name", ok);
+  f.sizeBytes = reqInt(j, "sizeBytes", ok);
+  f.md5 = reqStr(j, "md5", ok);
+  f.downloadUrl = reqStr(j, "downloadUrl", ok);
+  f.targetPath = reqStr(j, "targetPath", ok);
+  f.coverUrl = optStr(j, "coverUrl", ok);
+  f.coverTargetPath = optStr(j, "coverTargetPath", ok);
+  return f;
+}
+
 CatalogEntry parseCatalogEntry(json_t* j, bool& ok) {
   CatalogEntry e;
   e.id = reqStr(j, "id", ok);
@@ -186,6 +210,55 @@ std::optional<DownloadPlanResponse> parseDownloadPlanResponse(const std::string&
   return out;
 }
 
+std::optional<ScanPointer> parseScanPointer(const std::string& text) {
+  json_error_t err;
+  JsonRef root(json_loads(text.c_str(), 0, &err));
+  if (!root.j || !json_is_object(root.j)) return std::nullopt;
+
+  json_t* v = json_object_get(root.j, "v");
+  if (!v || !json_is_integer(v) || json_integer_value(v) != 1) return std::nullopt;
+
+  json_t* id = json_object_get(root.j, "id");
+  if (!id || !json_is_string(id)) return std::nullopt;
+
+  ScanPointer p;
+  p.v = 1;
+  p.id = std::string(json_string_value(id));
+  if (p.id.empty()) return std::nullopt;
+
+  json_t* file = json_object_get(root.j, "file");
+  if (file && !json_is_null(file)) {
+    if (!json_is_string(file)) return std::nullopt;
+    std::string f(json_string_value(file));
+    if (f.empty()) return std::nullopt;
+    p.file = std::move(f);
+  }
+  return p;
+}
+
+std::optional<ResolveResponse> parseResolveResponse(const std::string& text) {
+  json_error_t err;
+  JsonRef root(json_loads(text.c_str(), 0, &err));
+  if (!root.j || !json_is_object(root.j)) return std::nullopt;
+
+  bool ok = true;
+  ResolveResponse out;
+  out.id = reqStr(root.j, "id", ok);
+  out.console = reqConsole(root.j, "console", ok);
+  out.totalBytes = reqInt(root.j, "totalBytes", ok);
+
+  json_t* files = json_object_get(root.j, "files");
+  if (!files || !json_is_array(files)) return std::nullopt;
+  size_t i;
+  json_t* f;
+  json_array_foreach(files, i, f) {
+    if (!json_is_object(f)) return std::nullopt;
+    out.files.push_back(parseResolvedFile(f, ok));
+  }
+  if (!ok) return std::nullopt;
+  return out;
+}
+
 std::string serializeDownloadPlanRequest(const DownloadPlanRequest& req) {
   JsonRef root(json_object());
   json_object_set_new(root.j, "id", json_string(req.id.c_str()));
@@ -200,6 +273,30 @@ std::string serializeDownloadPlanRequest(const DownloadPlanRequest& req) {
   char* s = json_dumps(root.j, JSON_COMPACT);
   std::string out = s ? s : "{}";
   if (s) free(s);
+  return out;
+}
+
+namespace {
+// JSON-escape a single string value (including surrounding quotes) via jansson,
+// so serializeScanPointer emits the same bytes as the host nlohmann backend.
+std::string jsonString(const std::string& value) {
+  JsonRef node(json_string(value.c_str()));
+  char* s = node.j ? json_dumps(node.j, JSON_ENCODE_ANY | JSON_COMPACT) : nullptr;
+  std::string out = s ? s : "\"\"";
+  if (s) free(s);
+  return out;
+}
+}  // namespace
+
+std::string serializeScanPointer(const ScanPointer& pointer) {
+  // Canonical key order v -> id -> file, byte-identical to json_nlohmann.cpp.
+  std::string out = "{\"v\":1,\"id\":";
+  out += jsonString(pointer.id);
+  if (pointer.file) {
+    out += ",\"file\":";
+    out += jsonString(*pointer.file);
+  }
+  out += "}";
   return out;
 }
 

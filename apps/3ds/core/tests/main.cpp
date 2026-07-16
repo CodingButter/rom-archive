@@ -215,6 +215,98 @@ TEST_CASE("serialize download plan request") {
 }
 
 // ---------------------------------------------------------------------------
+// scan pointer + resolve (QR path)
+// ---------------------------------------------------------------------------
+
+TEST_CASE("parseScanPointer accepts the pinned website wire shapes") {
+  // Bundle pointer, exactly as scanPointerValue() emits it.
+  const auto bundle = parseScanPointer(R"({"v":1,"id":"gbahomebrew"})");
+  REQUIRE(bundle.has_value());
+  CHECK(bundle->v == 1);
+  CHECK(bundle->id == "gbahomebrew");
+  CHECK_FALSE(bundle->file.has_value());
+
+  // Single-ROM pointer with a filename containing spaces and parens.
+  const auto single =
+      parseScanPointer(R"({"v":1,"id":"gbahomebrew","file":"Metroid Fusion (USA).gba"})");
+  REQUIRE(single.has_value());
+  CHECK(single->id == "gbahomebrew");
+  REQUIRE(single->file.has_value());
+  CHECK(*single->file == "Metroid Fusion (USA).gba");
+}
+
+TEST_CASE("parseScanPointer rejects malformed / out-of-shape pointers") {
+  CHECK_FALSE(parseScanPointer(R"({"v":2,"id":"gbahomebrew"})").has_value());       // wrong version
+  CHECK_FALSE(parseScanPointer(R"({"v":1})").has_value());                          // missing id
+  CHECK_FALSE(parseScanPointer(R"({"v":1,"id":""})").has_value());                  // empty id
+  CHECK_FALSE(parseScanPointer(R"({"v":1,"id":123})").has_value());                 // non-string id
+  CHECK_FALSE(parseScanPointer(R"({"v":1,"id":"x","file":5})").has_value());        // non-string file
+  CHECK_FALSE(parseScanPointer(R"({"v":1,"id":"x","file":""})").has_value());       // empty file
+  CHECK_FALSE(parseScanPointer(R"(["v",1])").has_value());                          // non-object
+  CHECK_FALSE(parseScanPointer("not json at all").has_value());                     // garbage
+}
+
+TEST_CASE("parseScanPointer ignores unknown extra keys") {
+  const auto p = parseScanPointer(R"({"v":1,"id":"gbahomebrew","extra":"ignored"})");
+  REQUIRE(p.has_value());
+  CHECK(p->id == "gbahomebrew");
+  CHECK_FALSE(p->file.has_value());
+}
+
+TEST_CASE("serializeScanPointer emits canonical v -> id -> file order") {
+  ScanPointer bundle;
+  bundle.v = 1;
+  bundle.id = "gbahomebrew";
+  CHECK(serializeScanPointer(bundle) == R"({"v":1,"id":"gbahomebrew"})");
+
+  ScanPointer single;
+  single.v = 1;
+  single.id = "gbahomebrew";
+  single.file = "Metroid Fusion (USA).gba";
+  CHECK(serializeScanPointer(single) ==
+        R"({"v":1,"id":"gbahomebrew","file":"Metroid Fusion (USA).gba"})");
+
+  // Round-trip: serialize -> parse recovers the same pointer.
+  const auto reparsed = parseScanPointer(serializeScanPointer(single));
+  REQUIRE(reparsed.has_value());
+  CHECK(reparsed->id == single.id);
+  REQUIRE(reparsed->file.has_value());
+  CHECK(*reparsed->file == *single.file);
+}
+
+TEST_CASE("parseResolveResponse maps a resolve payload into the mirrored struct") {
+  const auto parsed = parseResolveResponse(readFixture("resolve.gba.json"));
+  REQUIRE(parsed.has_value());
+  CHECK(parsed->id == "gbahomebrew");
+  CHECK(parsed->console == Console::Gba);
+  CHECK(parsed->totalBytes == 3145728);
+  REQUIRE(parsed->files.size() == 2);
+
+  // First file carries cover fields.
+  const auto& withCover = parsed->files[0];
+  CHECK(withCover.name == "Metroid Fusion (USA).gba");
+  CHECK(withCover.targetPath == "roms/gba/Metroid Fusion (USA).gba");
+  CHECK_FALSE(withCover.md5.empty());
+  REQUIRE(withCover.coverUrl.has_value());
+  REQUIRE(withCover.coverTargetPath.has_value());
+  CHECK(*withCover.coverTargetPath == "roms/gba/Metroid Fusion (USA).png");
+
+  // Second file has no cover fields (optional absent).
+  const auto& noCover = parsed->files[1];
+  CHECK(noCover.name == "Unlabeled Homebrew.gba");
+  CHECK_FALSE(noCover.coverUrl.has_value());
+  CHECK_FALSE(noCover.coverTargetPath.has_value());
+}
+
+TEST_CASE("parseResolveResponse rejects unknown console and missing fields") {
+  CHECK_FALSE(parseResolveResponse(
+                  R"({"id":"x","console":"dreamcast","totalBytes":0,"files":[]})")
+                  .has_value());
+  CHECK_FALSE(parseResolveResponse(R"({"id":"x","console":"gba"})").has_value());  // no files
+  CHECK_FALSE(parseResolveResponse("{ not json").has_value());
+}
+
+// ---------------------------------------------------------------------------
 // fit-check
 // ---------------------------------------------------------------------------
 

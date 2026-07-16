@@ -59,6 +59,22 @@ ExcludedFile parseExcluded(const json& j) {
   return e;
 }
 
+ResolvedFile parseResolvedFile(const json& j) {
+  ResolvedFile f;
+  f.name = reqStr(j, "name");
+  f.sizeBytes = reqInt(j, "sizeBytes");
+  f.md5 = reqStr(j, "md5");
+  f.downloadUrl = reqStr(j, "downloadUrl");
+  f.targetPath = reqStr(j, "targetPath");
+  if (j.contains("coverUrl") && !j.at("coverUrl").is_null()) {
+    f.coverUrl = j.at("coverUrl").get<std::string>();
+  }
+  if (j.contains("coverTargetPath") && !j.at("coverTargetPath").is_null()) {
+    f.coverTargetPath = j.at("coverTargetPath").get<std::string>();
+  }
+  return f;
+}
+
 CatalogEntry parseCatalogEntry(const json& j) {
   CatalogEntry e;
   e.id = reqStr(j, "id");
@@ -116,12 +132,63 @@ std::optional<DownloadPlanResponse> parseDownloadPlanResponse(const std::string&
   }
 }
 
+std::optional<ScanPointer> parseScanPointer(const std::string& text) {
+  try {
+    const json j = json::parse(text);
+    if (!j.is_object()) return std::nullopt;
+    if (!j.contains("v") || !j.at("v").is_number_integer()) return std::nullopt;
+    if (j.at("v").get<int>() != 1) return std::nullopt;
+    if (!j.contains("id") || !j.at("id").is_string()) return std::nullopt;
+    ScanPointer p;
+    p.v = 1;
+    p.id = j.at("id").get<std::string>();
+    if (p.id.empty()) return std::nullopt;
+    if (j.contains("file") && !j.at("file").is_null()) {
+      if (!j.at("file").is_string()) return std::nullopt;
+      const auto file = j.at("file").get<std::string>();
+      if (file.empty()) return std::nullopt;
+      p.file = file;
+    }
+    return p;
+  } catch (const std::exception&) {
+    return std::nullopt;
+  }
+}
+
+std::optional<ResolveResponse> parseResolveResponse(const std::string& text) {
+  try {
+    const json j = json::parse(text);
+    ResolveResponse out;
+    out.id = reqStr(j, "id");
+    out.console = reqConsole(j, "console");
+    out.totalBytes = reqInt(j, "totalBytes");
+    for (const auto& f : j.at("files")) out.files.push_back(parseResolvedFile(f));
+    return out;
+  } catch (const std::exception&) {
+    return std::nullopt;
+  }
+}
+
 std::string serializeDownloadPlanRequest(const DownloadPlanRequest& req) {
   json j;
   j["id"] = req.id;
   j["freeSpaceBytes"] = req.freeSpaceBytes;
   if (req.selectedFileNames) j["selectedFileNames"] = *req.selectedFileNames;
   return j.dump();
+}
+
+std::string serializeScanPointer(const ScanPointer& pointer) {
+  // Emit canonical key order v -> id -> file explicitly (nlohmann's object dump
+  // sorts keys alphabetically, which would reorder them). Values are escaped via
+  // json(...).dump() so filenames with quotes/backslashes stay valid JSON.
+  std::string out = "{\"v\":1,\"id\":";
+  out += json(pointer.id).dump();
+  if (pointer.file) {
+    out += ",\"file\":";
+    out += json(*pointer.file).dump();
+  }
+  out += "}";
+  return out;
 }
 
 }  // namespace rom_archive

@@ -96,6 +96,43 @@ struct DownloadPlanResponse {
   // @contract:fields:DownloadPlanResponse:end
 };
 
+// The website "Send to 3DS" QR payload. Mirrors scanPointerValue() in
+// apps/site/src/lib/cover.ts: bundle = {"v":1,"id":...}, single ROM adds
+// "file". `console` is NOT carried — it is derived server-side by resolveScan.
+struct ScanPointer {
+  // @contract:fields:ScanPointer:begin
+  std::optional<std::string> file;
+  std::string id;
+  int v;
+  // @contract:fields:ScanPointer:end
+};
+
+// One concrete file in a resolved scan. Declared OUTSIDE ResolveResponse's
+// sentinel block (like PlanFile/ExcludedFile) so its field names do not leak
+// into ResolveResponse's block. Cover fields are optional.
+struct ResolvedFile {
+  // @contract:fields:ResolvedFile:begin
+  std::optional<std::string> coverTargetPath;
+  std::optional<std::string> coverUrl;
+  std::string downloadUrl;
+  std::string md5;
+  std::string name;
+  std::int64_t sizeBytes;
+  std::string targetPath;
+  // @contract:fields:ResolvedFile:end
+};
+
+// The /api/resolve response: a ScanPointer resolved to a concrete file list,
+// with the console derived from the catalog. Mirrors resolveScan()'s output.
+struct ResolveResponse {
+  // @contract:fields:ResolveResponse:begin
+  Console console;
+  std::vector<ResolvedFile> files;
+  std::string id;
+  std::int64_t totalBytes;
+  // @contract:fields:ResolveResponse:end
+};
+
 struct CatalogResponse {
   std::vector<CatalogEntry> entries;
 };
