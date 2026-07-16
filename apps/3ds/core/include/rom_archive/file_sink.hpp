@@ -28,6 +28,11 @@ class FileSink {
   // Remove a partially-written / failed file (called on verify mismatch or
   // transfer abort so corrupt ROMs never linger on the SD card).
   virtual void remove(const std::string& targetPath) = 0;
+
+  // Human-readable reason for the most recent open/write/close failure (e.g.
+  // "errno 28 (No space left)"). Empty when unknown. Backends may leave the
+  // default; it only feeds on-device diagnostics.
+  virtual std::string lastError() const { return {}; }
 };
 
 }  // namespace rom_archive

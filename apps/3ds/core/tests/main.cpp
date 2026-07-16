@@ -436,6 +436,8 @@ TEST_CASE("downloadPlan rejects and removes a corrupted file (md5 mismatch)") {
   CHECK_FALSE(report.allOk());
   // The corrupt file must not linger on the SD card.
   CHECK(sink.committed.count("roms/gba/rom.gba") == 0);
+  // The report names the mismatch so it can be shown on-device.
+  CHECK(report.files[0].detail.find(wrong) != std::string::npos);
 }
 
 TEST_CASE("downloadPlan reports an http failure") {
@@ -450,6 +452,8 @@ TEST_CASE("downloadPlan reports an http failure") {
   REQUIRE(report.files.size() == 1);
   CHECK(report.files[0].status == DownloadStatus::HttpError);
   CHECK(sink.committed.count("roms/gba/rom.gba") == 0);
+  // The transport's failure reason is carried into the report for display.
+  CHECK(report.files[0].detail == "network down");
 }
 
 TEST_CASE("downloadPlan rejects a targetPath that escapes roms/") {

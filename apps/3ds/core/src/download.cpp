@@ -49,6 +49,7 @@ DownloadReport downloadPlan(HttpClient& http, FileSink& sink,
 
     if (!isSafeTargetPath(file.targetPath)) {
       result.status = DownloadStatus::UnsafePath;
+      result.detail = "rejected path: " + file.targetPath;
       report.files.push_back(result);
       continue;
     }
@@ -59,6 +60,7 @@ DownloadReport downloadPlan(HttpClient& http, FileSink& sink,
 
     if (!sink.open(file.targetPath)) {
       result.status = DownloadStatus::WriteError;
+      result.detail = "open failed: " + sink.lastError();
       report.files.push_back(result);
       continue;
     }
@@ -105,9 +107,11 @@ DownloadReport downloadPlan(HttpClient& http, FileSink& sink,
     }
 
     if (writeFailed) {
+      const std::string reason = sink.lastError();
       sink.close();
       sink.remove(file.targetPath);
       result.status = DownloadStatus::WriteError;
+      result.detail = "write failed: " + reason;
       report.files.push_back(result);
       continue;
     }
@@ -116,13 +120,18 @@ DownloadReport downloadPlan(HttpClient& http, FileSink& sink,
       sink.close();
       sink.remove(file.targetPath);
       result.status = DownloadStatus::HttpError;
+      result.detail = http_result.error.empty()
+                          ? ("http status " + std::to_string(http_result.statusCode))
+                          : http_result.error;
       report.files.push_back(result);
       continue;
     }
 
     if (!sink.close()) {
+      const std::string reason = sink.lastError();
       sink.remove(file.targetPath);
       result.status = DownloadStatus::WriteError;
+      result.detail = "close failed: " + reason;
       report.files.push_back(result);
       continue;
     }
@@ -131,6 +140,7 @@ DownloadReport downloadPlan(HttpClient& http, FileSink& sink,
     if (!verifyHex(result.expectedMd5, result.computedMd5)) {
       sink.remove(file.targetPath);
       result.status = DownloadStatus::Md5Mismatch;
+      result.detail = "want " + result.expectedMd5 + " got " + result.computedMd5;
     }
 
     report.files.push_back(result);

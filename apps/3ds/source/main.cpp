@@ -338,6 +338,7 @@ int main() {
           ui.clearProgress();
 
           bool anyCancelled = false;
+          std::string firstFailure;
           std::vector<std::string> rows;
           for (const auto& r : report.files) {
             if (r.status == DownloadStatus::Cancelled) anyCancelled = true;
@@ -348,11 +349,16 @@ int main() {
                               : r.status == DownloadStatus::Cancelled ? "[stop] "
                                                                       : "[net!] ";
             rows.push_back(tag + r.name);
+            if (!r.detail.empty()) rows.push_back("    " + r.detail);
+            if (firstFailure.empty() && r.status != DownloadStatus::Ok &&
+                r.status != DownloadStatus::Cancelled && !r.detail.empty())
+              firstFailure = r.detail;
           }
           ui.setList(std::move(rows));
           ui.setStatus(std::string(report.allOk() ? "All files verified. "
                                    : anyCancelled ? "Cancelled. "
-                                                  : "Some files failed. ") +
+                                   : firstFailure.empty() ? "Some files failed. "
+                                                          : (firstFailure + "  ")) +
                        "B: back   START: quit");
           screen = Screen::Done;
         }

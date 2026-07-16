@@ -32,6 +32,8 @@ struct FileResult {
   DownloadStatus status;
   std::string expectedMd5;
   std::string computedMd5;  // empty if the transfer never completed
+  std::string detail;       // failure specifics (HTTP code, errno, md5 pair) for
+                            // on-device diagnosis; empty when status is Ok
 };
 
 struct DownloadReport {

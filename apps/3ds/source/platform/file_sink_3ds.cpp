@@ -6,7 +6,9 @@
 #include <3ds.h>
 #include <sys/stat.h>
 
+#include <cerrno>
 #include <cstdint>
+#include <cstring>
 #include <string>
 
 namespace rom_archive {
@@ -16,6 +18,11 @@ namespace {
 constexpr const char* kSdRoot = "sdmc:/";
 
 std::string sdPath(const std::string& targetPath) { return kSdRoot + targetPath; }
+
+std::string errnoText() {
+  const int e = errno;
+  return "errno " + std::to_string(e) + " (" + std::strerror(e) + ")";
+}
 
 // mkdir every parent directory of an SD-absolute path (idempotent).
 void makeParentDirs(const std::string& fullPath) {
@@ -43,18 +50,31 @@ bool FileSink3ds::open(const std::string& targetPath) {
   }
   const std::string full = sdPath(targetPath);
   makeParentDirs(full);
+  errno = 0;
   file_ = std::fopen(full.c_str(), "wb");
+  if (!file_) lastError_ = errnoText();
   return file_ != nullptr;
 }
 
 bool FileSink3ds::write(const std::uint8_t* data, std::size_t len) {
-  if (!file_) return false;
-  return std::fwrite(data, 1, len, file_) == len;
+  if (!file_) {
+    lastError_ = "no open file";
+    return false;
+  }
+  errno = 0;
+  if (std::fwrite(data, 1, len, file_) == len) return true;
+  lastError_ = errnoText();
+  return false;
 }
 
 bool FileSink3ds::close() {
-  if (!file_) return false;
+  if (!file_) {
+    lastError_ = "no open file";
+    return false;
+  }
+  errno = 0;
   const bool ok = std::fclose(file_) == 0;
+  if (!ok) lastError_ = errnoText();
   file_ = nullptr;
   return ok;
 }

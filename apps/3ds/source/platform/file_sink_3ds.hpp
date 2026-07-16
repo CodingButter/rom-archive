@@ -19,9 +19,11 @@ class FileSink3ds final : public FileSink {
   bool write(const std::uint8_t* data, std::size_t len) override;
   bool close() override;
   void remove(const std::string& targetPath) override;
+  std::string lastError() const override { return lastError_; }
 
  private:
   std::FILE* file_ = nullptr;
+  std::string lastError_;
 };
 
 // Free bytes available on the SD card, for the plan request's freeSpaceBytes.
