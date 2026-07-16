@@ -88,16 +88,30 @@ PY
 echo "[build] bannertool makebanner (.bnr) ..."
 bannertool makebanner -i banner.png -a banner.wav -o "$TARGET.bnr"
 
+# The CIA gets its own SMDH from bannertool — NOT the smdhtool one the Makefile
+# builds for the .3dsx. smdhtool writes application settings the HOME menu
+# rejects (flags 0x0141 with RegionRatingRequired but only "rating pending"
+# 0xA0 rating bytes, region lockout 0xFFFFFFFF instead of 0x7FFFFFFF), which
+# made installed titles invisible on HOME while FBI still listed them.
+# bannertool emits the same settings as known-working homebrew (FBI/3hs):
+# zeroed ratings, region-free 0x7FFFFFFF, flags visible|allow3d|recordusage.
+echo "[build] bannertool makesmdh (CIA icon) ..."
+bannertool makesmdh \
+  -s "ROM Archive" \
+  -l "Download homebrew ROMs to TWiLight Menu++" \
+  -p "rom-archive" \
+  -i icon.png -o "$TARGET-cia.smdh"
+
 echo "[build] makerom (.cia) ..."
 makerom -f cia -target t -exefslogo -desc app:4 \
   -elf "$TARGET.elf" \
-  -icon "$TARGET.smdh" \
+  -icon "$TARGET-cia.smdh" \
   -banner "$TARGET.bnr" \
   -rsf app.rsf \
   -o "$TARGET.cia"
 
 # Remove the transient banner inputs (never part of the deliverable).
-rm -f banner.png banner.wav "$TARGET.bnr"
+rm -f banner.png banner.wav "$TARGET.bnr" "$TARGET-cia.smdh"
 
 echo "[build] artifacts:"
 ls -la "$TARGET.3dsx" "$TARGET.cia"
