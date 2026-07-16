@@ -27,6 +27,8 @@ Ui::Ui() {
   clrBg_ = C2D_Color32(0x1e, 0x1e, 0x2e, 0xff);
   clrText_ = C2D_Color32(0xcd, 0xd6, 0xf4, 0xff);
   clrHi_ = C2D_Color32(0x89, 0xb4, 0xfa, 0xff);
+  clrBarBg_ = C2D_Color32(0x31, 0x32, 0x44, 0xff);
+  clrBarFill_ = C2D_Color32(0x00, 0xcc, 0xa3, 0xff);
 }
 
 Ui::~Ui() {
@@ -182,6 +184,21 @@ void Ui::drawStatus() {
 
   C2D_TargetClear(bottom_, clrBg_);
   C2D_SceneBegin(bottom_);
+
+  // Progress bars (file above overall), anchored to the bottom of the screen
+  // so they never collide with the wrapped status text above.
+  auto drawBar = [this](float frac, float y) {
+    if (frac < 0.0f) return;
+    frac = std::min(1.0f, frac);
+    constexpr float kBarX = 8.0f;
+    constexpr float kBarW = 320.0f - 16.0f;
+    constexpr float kBarH = 12.0f;
+    C2D_DrawRectSolid(kBarX, y, 0.0f, kBarW, kBarH, clrBarBg_);
+    if (frac > 0.0f) C2D_DrawRectSolid(kBarX, y, 0.0f, kBarW * frac, kBarH, clrBarFill_);
+  };
+  drawBar(fileProgress_, 240.0f - 40.0f);
+  drawBar(overallProgress_, 240.0f - 22.0f);
+
   if (status_.empty()) return;
 
   float y = 8.0f;

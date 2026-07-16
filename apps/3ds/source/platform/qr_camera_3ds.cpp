@@ -1,22 +1,19 @@
-// qr_camera_3ds.cpp — see header. Drives the OUTER camera (cam:u) — the one
-// every QR homebrew uses, since you point the console's back at the code — at
-// the top screen's 400x240 into a linearAlloc RGB565 buffer (CAMU DMA requires
-// linear memory, not app heap). The receive is armed once at start and re-armed
-// after each completed frame; poll() waits one frame's worth on the stored
-// event so the UI stays live. The init/teardown order follows the proven
-// Anemone3DS/FBI sequence (trimming off, stop -> drain busy -> clear ->
-// deactivate -> exit) to avoid the documented cam:u exit race. The frame is
-// capped at 400x240 so quirc cannot be driven into its deep-recursion failure
-// on noisy non-QR frames.
+// qr_camera_3ds.cpp — see header. The capture thread is a line-for-line port
+// of FBI's task_capture_cam_thread (source/core/task/capturecam.c), the QR
+// scanner known to work on this exact hardware: OUTER camera at 400x240
+// RGB565, heap capture buffer, trimming ENABLED with center params, infinite
+// waits on {cancel, receive, buffer-error}, memcpy the completed frame to the
+// shared buffer under a lock, and buffer-error recovery that clears + re-arms
+// + restarts. The main thread's poll() never blocks: it lifts the newest
+// shared frame and runs one quirc pass (frame capped at 400x240 so quirc
+// cannot be driven into its deep-recursion failure on noisy non-QR frames).
 #include "platform/qr_camera_3ds.hpp"
 
-#include <3ds.h>
-
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "quirc.h"
-
-#include <cstdio>
 
 namespace rom_archive {
 
@@ -27,28 +24,163 @@ std::string hexResult(Result rc) {
   std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(rc));
   return buf;
 }
+
 constexpr int kWidth = QrCamera::width();
 constexpr int kHeight = QrCamera::height();
 constexpr u32 kBufSize = kWidth * kHeight * 2;  // RGB565 = 2 bytes/pixel
 
-// One wait per poll(), roughly one 30fps frame period, so the render loop is
-// never starved even when the camera produces nothing.
-constexpr s64 kWaitTimeoutNs = 33'000'000;
+enum { kEvCancel = 0, kEvRecv = 1, kEvBufErr = 2, kEvCount = 3 };
 
-// ~2 seconds of consecutive timeouts before attempting a capture restart, and
-// how many failed restarts to tolerate before declaring the camera dead.
-constexpr int kTimeoutsBeforeRecovery = 60;
-constexpr int kMaxRecoveries = 3;
 }  // namespace
 
-QrCamera::QrCamera() = default;
+QrCamera::QrCamera() { LightLock_Init(&lock_); }
 
 QrCamera::~QrCamera() { stop(); }
+
+void QrCamera::captureThreadEntry(void* arg) {
+  static_cast<QrCamera*>(arg)->captureThread();
+}
+
+void QrCamera::captureThread() {
+  Handle events[kEvCount] = {0};
+  events[kEvCancel] = cancelEvent_;
+
+  auto fail = [this](const char* stage, Result rc) {
+    LightLock_Lock(&lock_);
+    lastErrorShared_ = std::string(stage) + " " + hexResult(rc);
+    LightLock_Unlock(&lock_);
+    threadFailed_.store(true);
+  };
+
+  // FBI uses a plain heap buffer for the CAMU receive (capturecam.c) — proven
+  // on hardware, so mirrored here (not linearAlloc).
+  u16* buffer = static_cast<u16*>(std::calloc(1, kBufSize));
+  if (!buffer) {
+    fail("calloc", -1);
+    return;
+  }
+
+  Result res = camInit();
+  if (R_FAILED(res)) {
+    std::free(buffer);
+    fail("camInit", res);
+    return;
+  }
+
+  const char* stage = nullptr;
+  auto step = [&](const char* name, Result r) {
+    if (R_FAILED(r)) {
+      stage = name;
+      res = r;
+      return false;
+    }
+    return true;
+  };
+
+  bool ok =
+      step("SetSize", CAMU_SetSize(SELECT_OUT1, SIZE_CTR_TOP_LCD, CONTEXT_A)) &&
+      step("SetOutputFormat", CAMU_SetOutputFormat(SELECT_OUT1, OUTPUT_RGB_565, CONTEXT_A)) &&
+      step("SetFrameRate", CAMU_SetFrameRate(SELECT_OUT1, FRAME_RATE_30)) &&
+      step("SetNoiseFilter", CAMU_SetNoiseFilter(SELECT_OUT1, true)) &&
+      step("SetAutoExposure", CAMU_SetAutoExposure(SELECT_OUT1, true)) &&
+      step("SetAutoWhiteBalance", CAMU_SetAutoWhiteBalance(SELECT_OUT1, true)) &&
+      step("Activate", CAMU_Activate(SELECT_OUT1));
+
+  if (ok) {
+    u32 transferUnit = 0;
+    ok = step("GetBufferErrorInterruptEvent",
+              CAMU_GetBufferErrorInterruptEvent(&events[kEvBufErr], PORT_CAM1)) &&
+         step("SetTrimming", CAMU_SetTrimming(PORT_CAM1, true)) &&
+         step("SetTrimmingParamsCenter",
+              CAMU_SetTrimmingParamsCenter(PORT_CAM1, kWidth, kHeight, 400, 240)) &&
+         step("GetMaxBytes", CAMU_GetMaxBytes(&transferUnit, kWidth, kHeight)) &&
+         step("SetTransferBytes",
+              CAMU_SetTransferBytes(PORT_CAM1, transferUnit, kWidth, kHeight)) &&
+         step("ClearBuffer", CAMU_ClearBuffer(PORT_CAM1)) &&
+         step("SetReceiving", CAMU_SetReceiving(&events[kEvRecv], buffer, PORT_CAM1,
+                                                kBufSize, static_cast<s16>(transferUnit))) &&
+         step("StartCapture", CAMU_StartCapture(PORT_CAM1));
+
+    if (ok) {
+      bool cancelRequested = false;
+      while (!cancelRequested && R_SUCCEEDED(res)) {
+        s32 index = 0;
+        res = svcWaitSynchronizationN(&index, events, kEvCount, false, U64_MAX);
+        if (R_FAILED(res)) {
+          stage = "WaitSynchronizationN";
+          break;
+        }
+        switch (index) {
+          case kEvCancel:
+            cancelRequested = true;
+            break;
+          case kEvRecv:
+            svcCloseHandle(events[kEvRecv]);
+            events[kEvRecv] = 0;
+
+            LightLock_Lock(&lock_);
+            std::memcpy(sharedBuf_.data(), buffer, kBufSize);
+            LightLock_Unlock(&lock_);
+            newFrameShared_.store(true);
+            framesReceived_.fetch_add(1);
+
+            res = CAMU_SetReceiving(&events[kEvRecv], buffer, PORT_CAM1, kBufSize,
+                                    static_cast<s16>(transferUnit));
+            if (R_FAILED(res)) stage = "SetReceiving (re-arm)";
+            break;
+          case kEvBufErr:
+            // The port wedged (a frame completed while no receive was armed):
+            // clear, re-arm, restart — FBI's exact recovery.
+            svcCloseHandle(events[kEvRecv]);
+            events[kEvRecv] = 0;
+
+            if (step("ClearBuffer (recover)", CAMU_ClearBuffer(PORT_CAM1)) &&
+                step("SetReceiving (recover)",
+                     CAMU_SetReceiving(&events[kEvRecv], buffer, PORT_CAM1, kBufSize,
+                                       static_cast<s16>(transferUnit))) &&
+                step("StartCapture (recover)", CAMU_StartCapture(PORT_CAM1))) {
+              // recovered
+            }
+            break;
+          default:
+            break;
+        }
+      }
+
+      CAMU_StopCapture(PORT_CAM1);
+      bool busy = false;
+      for (int i = 0; i < 1000 && R_SUCCEEDED(CAMU_IsBusy(&busy, PORT_CAM1)) && busy; ++i) {
+        svcSleepThread(1'000'000);  // 1ms
+      }
+      CAMU_ClearBuffer(PORT_CAM1);
+    }
+
+    CAMU_Activate(SELECT_NONE);
+  }
+
+  camExit();
+  std::free(buffer);
+
+  for (int i = kEvRecv; i < kEvCount; ++i) {  // cancelEvent_ is owned by stop()
+    if (events[i]) {
+      svcCloseHandle(events[i]);
+      events[i] = 0;
+    }
+  }
+
+  if (R_FAILED(res) && stage) fail(stage, res);
+}
 
 bool QrCamera::start() {
   if (running_) return true;
   lastError_.clear();
-  framesReceived_ = 0;
+  lastErrorShared_.clear();
+  framesReceived_.store(0);
+  threadFailed_.store(false);
+  newFrameShared_.store(false);
+  haveFrame_ = false;
+  newFrameForDraw_ = false;
+  payload_.clear();
 
   struct quirc* q = quirc_new();
   if (!q) {
@@ -62,171 +194,52 @@ bool QrCamera::start() {
   }
   quirc_ = q;
 
-  camBuf_ = static_cast<u16*>(linearAlloc(kBufSize));
-  if (!camBuf_) {
-    quirc_destroy(q);
-    quirc_ = nullptr;
-    lastError_ = "linearAlloc failed";
-    return false;
-  }
+  sharedBuf_.assign(kWidth * kHeight, 0);
+  frameCopy_.assign(kWidth * kHeight, 0);
 
-  Result rc = camInit();
+  Result rc = svcCreateEvent(&cancelEvent_, RESET_STICKY);
   if (R_FAILED(rc)) {
-    linearFree(camBuf_);
-    camBuf_ = nullptr;
     quirc_destroy(q);
     quirc_ = nullptr;
-    lastError_ = "camInit " + hexResult(rc);
+    lastError_ = "CreateEvent " + hexResult(rc);
     return false;
   }
 
-  // Configure the outer camera, disable trimming (without this the transfer
-  // geometry can mismatch and the receive never completes), size the transfer,
-  // arm the first receive, then start capture. Any failure tears down and
-  // records WHICH call failed with its result code.
-  auto step = [this](const char* name, Result r) {
-    if (R_FAILED(r)) {
-      lastError_ = std::string(name) + " " + hexResult(r);
-      return false;
-    }
-    return true;
-  };
-
-  bool ok = true;
-  ok = ok && step("SetSize", CAMU_SetSize(SELECT_OUT1, SIZE_CTR_TOP_LCD, CONTEXT_A));
-  ok = ok && step("SetOutputFormat",
-                  CAMU_SetOutputFormat(SELECT_OUT1, OUTPUT_RGB_565, CONTEXT_A));
-  ok = ok && step("SetFrameRate", CAMU_SetFrameRate(SELECT_OUT1, FRAME_RATE_30));
-  ok = ok && step("SetNoiseFilter", CAMU_SetNoiseFilter(SELECT_OUT1, true));
-  ok = ok && step("SetAutoExposure", CAMU_SetAutoExposure(SELECT_OUT1, true));
-  ok = ok && step("SetAutoWhiteBalance", CAMU_SetAutoWhiteBalance(SELECT_OUT1, true));
-  ok = ok && step("Activate", CAMU_Activate(SELECT_OUT1));
-  ok = ok && step("SetTrimming", CAMU_SetTrimming(PORT_CAM1, false));
-
-  u32 transferUnit = 0;
-  ok = ok && step("GetMaxBytes", CAMU_GetMaxBytes(&transferUnit, kWidth, kHeight));
-  ok = ok && step("SetTransferBytes",
-                  CAMU_SetTransferBytes(PORT_CAM1, transferUnit, kWidth, kHeight));
-  ok = ok && step("ClearBuffer", CAMU_ClearBuffer(PORT_CAM1));
-
-  // The buffer-error interrupt: signaled when the port wedges (a frame
-  // completed while no receive was armed). poll() watches it to restart the
-  // capture immediately instead of stalling.
-  Handle bufErr = 0;
-  ok = ok && step("GetBufferErrorInterruptEvent",
-                  CAMU_GetBufferErrorInterruptEvent(&bufErr, PORT_CAM1));
-
-  Handle ev = 0;
-  ok = ok && step("SetReceiving", CAMU_SetReceiving(&ev, camBuf_, PORT_CAM1, kBufSize,
-                                                    static_cast<s16>(transferUnit)));
-  ok = ok && step("StartCapture", CAMU_StartCapture(PORT_CAM1));
-
-  if (!ok) {
-    if (ev) svcCloseHandle(ev);
-    if (bufErr) svcCloseHandle(bufErr);
-    shutdownCamera();
+  // Same shape as FBI's capture thread: 64 KiB stack, priority 0x1A, core 0.
+  thread_ = threadCreate(&QrCamera::captureThreadEntry, this, 0x10000, 0x1A, 0, false);
+  if (!thread_) {
+    svcCloseHandle(cancelEvent_);
+    cancelEvent_ = 0;
     quirc_destroy(q);
     quirc_ = nullptr;
+    lastError_ = "threadCreate failed";
     return false;
   }
 
-  recvEvent_ = ev;
-  bufErrEvent_ = bufErr;
-  transferUnit_ = transferUnit;
-  frameCopy_.clear();
-  newFrame_ = false;
-  timeouts_ = 0;
-  recoveries_ = 0;
   running_ = true;
   return true;
 }
 
 QrPoll QrCamera::poll() {
-  if (!running_ || !quirc_ || !recvEvent_) return QrPoll::Error;
+  if (!running_ || !quirc_) return QrPoll::Error;
 
-  auto* q = static_cast<struct quirc*>(quirc_);
-
-  // Wait (bounded) on the receive that was armed at start() or by the
-  // previous completed frame.
-  if (R_FAILED(svcWaitSynchronization(recvEvent_, kWaitTimeoutNs))) {
-    // No frame this tick. First check the buffer-error interrupt: with
-    // continuous capture the port wedges whenever a frame completes while no
-    // receive is armed (routine — it can happen every frame boundary), and
-    // once wedged it never signals the receive again. Recover immediately:
-    // stop, clear, re-arm, restart. This is the FBI/Anemone pattern and is
-    // NOT counted as a failure.
-    if (bufErrEvent_ &&
-        R_SUCCEEDED(svcWaitSynchronization(bufErrEvent_, 0))) {
-      svcClearEvent(bufErrEvent_);
-      svcCloseHandle(recvEvent_);
-      recvEvent_ = 0;
-      CAMU_StopCapture(PORT_CAM1);
-      CAMU_ClearBuffer(PORT_CAM1);
-      Handle ev = 0;
-      Result rc = CAMU_SetReceiving(&ev, camBuf_, PORT_CAM1, kBufSize,
-                                    static_cast<s16>(transferUnit_));
-      if (R_FAILED(rc)) {
-        lastError_ = "re-arm SetReceiving " + hexResult(rc);
-        return QrPoll::Error;
-      }
-      recvEvent_ = ev;
-      CAMU_StartCapture(PORT_CAM1);
-      timeouts_ = 0;
-      return QrPoll::NoCode;
-    }
-
-    // A long run of silent timeouts (no buffer error, no frames) means the
-    // transfer wedged some other way — clear and restart the capture. Only
-    // after that recovery repeatedly fails is the camera declared unusable.
-    if (++timeouts_ >= kTimeoutsBeforeRecovery) {
-      timeouts_ = 0;
-      if (++recoveries_ > kMaxRecoveries) {
-        lastError_ = "no frames after " + std::to_string(kMaxRecoveries) +
-                     " capture restarts";
-        return QrPoll::Error;
-      }
-      svcCloseHandle(recvEvent_);
-      recvEvent_ = 0;
-      CAMU_StopCapture(PORT_CAM1);
-      CAMU_ClearBuffer(PORT_CAM1);
-      Handle ev = 0;
-      Result rc = CAMU_SetReceiving(&ev, camBuf_, PORT_CAM1, kBufSize,
-                                    static_cast<s16>(transferUnit_));
-      if (R_FAILED(rc)) {
-        lastError_ = "recovery SetReceiving " + hexResult(rc);
-        return QrPoll::Error;
-      }
-      recvEvent_ = ev;
-      CAMU_StartCapture(PORT_CAM1);
-    }
-    return QrPoll::NoCode;
-  }
-
-  // Frame complete. The camera DMA wrote straight to memory, bypassing the CPU
-  // data cache — invalidate the buffer's cache lines first, or the CPU keeps
-  // re-reading the stale lines it cached on the first frame (the on-device
-  // symptom: one glitched still image forever while frames keep arriving).
-  // Then snapshot (the re-armed DMA below will start overwriting camBuf_) and
-  // immediately arm the next receive so capture never stalls.
-  svcCloseHandle(recvEvent_);
-  recvEvent_ = 0;
-  GSPGPU_InvalidateDataCache(camBuf_, kBufSize);
-  frameCopy_.assign(camBuf_, camBuf_ + kWidth * kHeight);
-  newFrame_ = true;
-  ++framesReceived_;
-  timeouts_ = 0;
-  recoveries_ = 0;
-
-  Handle ev = 0;
-  Result rearmRc = CAMU_SetReceiving(&ev, camBuf_, PORT_CAM1, kBufSize,
-                                     static_cast<s16>(transferUnit_));
-  if (R_FAILED(rearmRc)) {
-    lastError_ = "next-frame SetReceiving " + hexResult(rearmRc);
+  if (threadFailed_.load()) {
+    LightLock_Lock(&lock_);
+    lastError_ = lastErrorShared_;
+    LightLock_Unlock(&lock_);
     return QrPoll::Error;
   }
-  recvEvent_ = ev;
+
+  if (!newFrameShared_.exchange(false)) return QrPoll::NoCode;
+
+  LightLock_Lock(&lock_);
+  std::memcpy(frameCopy_.data(), sharedBuf_.data(), kBufSize);
+  LightLock_Unlock(&lock_);
+  haveFrame_ = true;
+  newFrameForDraw_ = true;
 
   // Convert RGB565 -> 8-bit luma directly into quirc's image buffer.
+  auto* q = static_cast<struct quirc*>(quirc_);
   int qw = 0, qh = 0;
   uint8_t* image = quirc_begin(q, &qw, &qh);
   if (!image || qw != kWidth || qh != kHeight) return QrPoll::Error;
@@ -262,39 +275,19 @@ QrPoll QrCamera::poll() {
   return QrPoll::NoCode;
 }
 
-void QrCamera::shutdownCamera() {
-  // Proven-safe order: stop, drain the busy flag, clear, deactivate, exit.
-  // Skipping the drain is the documented cam:u exit race.
-  CAMU_StopCapture(PORT_CAM1);
-  bool busy = false;
-  for (int i = 0; i < 100 && R_SUCCEEDED(CAMU_IsBusy(&busy, PORT_CAM1)) && busy; ++i) {
-    svcSleepThread(1'000'000);  // 1ms
-  }
-  CAMU_ClearBuffer(PORT_CAM1);
-  CAMU_Activate(SELECT_NONE);
-  camExit();
-
-  if (recvEvent_) {
-    svcCloseHandle(recvEvent_);
-    recvEvent_ = 0;
-  }
-  if (bufErrEvent_) {
-    svcCloseHandle(bufErrEvent_);
-    bufErrEvent_ = 0;
-  }
-  if (camBuf_) {
-    linearFree(camBuf_);
-    camBuf_ = nullptr;
-  }
-}
-
 void QrCamera::stop() {
   if (running_) {
-    shutdownCamera();
+    // Signal the thread (it owns the full cam:u teardown) and join it.
+    svcSignalEvent(cancelEvent_);
+    threadJoin(thread_, U64_MAX);
+    threadFree(thread_);
+    thread_ = nullptr;
+    svcCloseHandle(cancelEvent_);
+    cancelEvent_ = 0;
     running_ = false;
   }
-  frameCopy_.clear();
-  newFrame_ = false;
+  haveFrame_ = false;
+  newFrameForDraw_ = false;
   if (quirc_) {
     quirc_destroy(static_cast<struct quirc*>(quirc_));
     quirc_ = nullptr;

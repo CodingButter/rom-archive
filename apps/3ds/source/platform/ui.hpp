@@ -26,6 +26,7 @@ class Ui {
   bool pressedA() const { return down_ & KEY_A; }
   bool pressedB() const { return down_ & KEY_B; }
   bool pressedX() const { return down_ & KEY_X; }
+  bool pressedY() const { return down_ & KEY_Y; }
 
   // Set the scrollable list shown on the top screen and the current selection.
   // Clears any multi-select state and returns to plain single-list mode.
@@ -50,6 +51,15 @@ class Ui {
   // One-line status shown on the bottom screen (e.g. "Downloading 2/5...").
   void setStatus(std::string status) { status_ = std::move(status); }
 
+  // Progress bars drawn under the status text on the bottom screen. Fractions
+  // are clamped to [0,1]; pass a negative value to hide a bar. `file` is the
+  // in-flight file, `overall` the whole plan.
+  void setProgress(float file, float overall) {
+    fileProgress_ = file;
+    overallProgress_ = overall;
+  }
+  void clearProgress() { setProgress(-1.0f, -1.0f); }
+
   // Render the current frame (list + status).
   void draw();
 
@@ -66,6 +76,8 @@ class Ui {
   bool multiSelect_ = false;
   std::vector<bool> checked_;  // per-row checkbox state, sized to items_
   std::string status_;
+  float fileProgress_ = -1.0f;
+  float overallProgress_ = -1.0f;
   u32 down_ = 0;
 
   // Draw the bottom-screen status line into the current frame. Shared by
@@ -84,6 +96,8 @@ class Ui {
   u32 clrBg_ = 0;
   u32 clrText_ = 0;
   u32 clrHi_ = 0;
+  u32 clrBarBg_ = 0;
+  u32 clrBarFill_ = 0;
 };
 
 }  // namespace rom_archive

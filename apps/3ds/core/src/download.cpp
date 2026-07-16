@@ -20,7 +20,7 @@ bool isSafeTargetPath(const std::string& path) {
 
 DownloadReport downloadPlan(HttpClient& http, FileSink& sink,
                             const DownloadPlanResponse& plan,
-                            const ProgressFn& progress) {
+                            const ProgressFn& progress, const CancelFn& cancelled) {
   DownloadReport report;
 
   for (std::size_t i = 0; i < plan.files.size(); ++i) {
@@ -31,11 +31,31 @@ DownloadReport downloadPlan(HttpClient& http, FileSink& sink,
     result.expectedMd5 = file.md5;
     result.status = DownloadStatus::Ok;
 
+    // A cancel between files stops the whole plan: mark this and every
+    // remaining file without touching the network or the sink.
+    if (cancelled && cancelled()) {
+      result.status = DownloadStatus::Cancelled;
+      result.computedMd5.clear();
+      for (std::size_t j = i; j < plan.files.size(); ++j) {
+        FileResult skipped;
+        skipped.name = plan.files[j].name;
+        skipped.targetPath = plan.files[j].targetPath;
+        skipped.expectedMd5 = plan.files[j].md5;
+        skipped.status = DownloadStatus::Cancelled;
+        report.files.push_back(skipped);
+      }
+      return report;
+    }
+
     if (!isSafeTargetPath(file.targetPath)) {
       result.status = DownloadStatus::UnsafePath;
       report.files.push_back(result);
       continue;
     }
+
+    // Announce the file before the transfer starts so the UI can show
+    // "connecting" instead of appearing frozen until the first chunk.
+    if (progress) progress(i, 0, file.sizeBytes);
 
     if (!sink.open(file.targetPath)) {
       result.status = DownloadStatus::WriteError;
@@ -46,11 +66,16 @@ DownloadReport downloadPlan(HttpClient& http, FileSink& sink,
     Md5 hasher;
     std::int64_t downloaded = 0;
     bool writeFailed = false;
+    bool wasCancelled = false;
 
     // The sink for the transport: each arriving chunk is both hashed and
     // written. Because the seam is chunk-callback, the whole ROM is never held
     // in memory — it flows straight through hash+write.
     const ChunkSink onChunk = [&](const std::uint8_t* data, std::size_t len) -> bool {
+      if (cancelled && cancelled()) {
+        wasCancelled = true;
+        return false;  // abort the transfer
+      }
       if (!sink.write(data, len)) {
         writeFailed = true;
         return false;  // abort the transfer
@@ -62,6 +87,22 @@ DownloadReport downloadPlan(HttpClient& http, FileSink& sink,
     };
 
     const HttpResult http_result = http.get(file.downloadUrl, onChunk);
+
+    if (wasCancelled) {
+      sink.close();
+      sink.remove(file.targetPath);
+      result.status = DownloadStatus::Cancelled;
+      report.files.push_back(result);
+      for (std::size_t j = i + 1; j < plan.files.size(); ++j) {
+        FileResult skipped;
+        skipped.name = plan.files[j].name;
+        skipped.targetPath = plan.files[j].targetPath;
+        skipped.expectedMd5 = plan.files[j].md5;
+        skipped.status = DownloadStatus::Cancelled;
+        report.files.push_back(skipped);
+      }
+      return report;
+    }
 
     if (writeFailed) {
       sink.close();

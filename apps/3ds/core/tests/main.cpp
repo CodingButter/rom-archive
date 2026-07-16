@@ -472,3 +472,54 @@ TEST_CASE("downloadPlan rejects a targetPath that escapes roms/") {
   // Nothing was ever opened or written for an unsafe path.
   CHECK(sink.committed.empty());
 }
+
+TEST_CASE("downloadPlan cancel mid-file removes the partial and skips the rest") {
+  const std::string body = "a long enough body to arrive in several chunks";
+  const std::string good = md5Hex(bytesOf(body).data(), body.size());
+
+  auto plan = makePlan(body, good);
+  PlanFile second = plan.files[0];
+  second.name = "rom2.gba";
+  second.downloadUrl = "https://archive.org/download/x/rom2.gba";
+  second.targetPath = "roms/gba/rom2.gba";
+  plan.files.push_back(second);
+
+  FakeHttp http;
+  http.bodies[plan.files[0].downloadUrl] = body;
+  http.bodies[plan.files[1].downloadUrl] = body;
+  FakeSink sink;
+
+  // Cancel after the third chunk of the first file.
+  int chunks = 0;
+  const auto report = downloadPlan(
+      http, sink, plan,
+      [&](std::size_t, std::int64_t downloaded, std::int64_t) {
+        if (downloaded > 0) ++chunks;
+      },
+      [&] { return chunks >= 3; });
+
+  REQUIRE(report.files.size() == 2);
+  CHECK(report.files[0].status == DownloadStatus::Cancelled);
+  CHECK(report.files[1].status == DownloadStatus::Cancelled);
+  CHECK_FALSE(report.allOk());
+  // The partial was removed and the second file was never fetched.
+  CHECK(sink.committed.empty());
+}
+
+TEST_CASE("downloadPlan announces each file with a zero-byte progress call") {
+  const std::string body = "hello";
+  const auto plan = makePlan(body, md5Hex(bytesOf(body).data(), body.size()));
+
+  FakeHttp http;
+  http.bodies[plan.files[0].downloadUrl] = body;
+  FakeSink sink;
+
+  std::vector<std::int64_t> seen;
+  downloadPlan(http, sink, plan,
+               [&](std::size_t, std::int64_t downloaded, std::int64_t) {
+                 seen.push_back(downloaded);
+               });
+  REQUIRE(!seen.empty());
+  CHECK(seen.front() == 0);  // "connecting" announcement before the first chunk
+  CHECK(seen.back() == static_cast<std::int64_t>(body.size()));
+}

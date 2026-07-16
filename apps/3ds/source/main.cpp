@@ -10,6 +10,7 @@
 // verifying MD5 on the fly.
 #include <3ds.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -210,7 +211,7 @@ int main() {
               rows.push_back(f.name + "  (" + bytesHuman(f.sizeBytes) + ")");
             ui.setList(std::move(rows));
             ui.setMultiSelect(true);
-            ui.setStatus("X: select  A: plan (all if none)  L/R: page  B: back");
+            ui.setStatus("A: download this  X: mark  Y: whole bundle  L/R: page  B: back");
             screen = Screen::Item;
           } else {
             screen = Screen::Error;
@@ -231,19 +232,25 @@ int main() {
         } else if (ui.pressedX()) {
           // Toggle the highlighted file into/out of the selection.
           ui.toggleSelected();
-        } else if (ui.pressedA()) {
-          // Plan the checked subset, or the whole item when nothing is checked.
+        } else if (ui.pressedA() || ui.pressedY()) {
+          // Y plans the whole bundle. A plans the marked subset — or, when
+          // nothing is marked, just the highlighted file. Downloading
+          // everything is never the silent default: it takes the explicit Y.
           DownloadPlanRequest req;
           req.id = item.id;
           req.freeSpaceBytes = sdFreeBytes();
-          if (ui.anyChecked()) {
+          if (ui.pressedY()) {
+            req.selectedFileNames = std::nullopt;  // whole bundle
+          } else if (ui.anyChecked()) {
             std::vector<std::string> chosen;
             for (int i : ui.checkedIndices())
               if (static_cast<std::size_t>(i) < item.files.size())
                 chosen.push_back(item.files[i].name);
             req.selectedFileNames = std::move(chosen);
           } else {
-            req.selectedFileNames = std::nullopt;  // whole item
+            const std::size_t sel = static_cast<std::size_t>(ui.selectedIndex());
+            if (sel >= item.files.size()) break;
+            req.selectedFileNames = std::vector<std::string>{item.files[sel].name};
           }
           ui.setStatus("Planning...");
           ui.draw();
@@ -283,33 +290,69 @@ int main() {
               rows.push_back(f.name + "  (" + bytesHuman(f.sizeBytes) + ")");
             ui.setList(std::move(rows));
             ui.setMultiSelect(true);
-            ui.setStatus("X: select  A: plan (all if none)  L/R: page  B: back");
+            ui.setStatus("A: download this  X: mark  Y: whole bundle  L/R: page  B: back");
             screen = Screen::Item;
           }
         } else if (ui.pressedA() && !plan.files.empty()) {
           screen = Screen::Downloading;
           FileSink3ds sink;
           const std::size_t total = plan.files.size();
+
+          // Prefix byte sums so the overall bar tracks the whole plan, not
+          // just the in-flight file.
+          std::vector<std::int64_t> bytesBefore(total, 0);
+          for (std::size_t i = 1; i < total; ++i)
+            bytesBefore[i] =
+                bytesBefore[i - 1] + std::max<std::int64_t>(plan.files[i - 1].sizeBytes, 0);
+
+          bool cancelRequested = false;
+          u64 lastDrawMs = 0;
           report = downloadPlan(
               api.http(), sink, plan,
               [&](std::size_t idx, std::int64_t done, std::int64_t size) {
-                ui.setStatus("Downloading " + std::to_string(idx + 1) + "/" +
-                             std::to_string(total) + "  " + bytesHuman(done) + " / " +
-                             bytesHuman(size));
-                ui.draw();
-              });
+                // The download runs synchronously, so input and rendering are
+                // pumped from here. Redraws are throttled to ~10/s (each
+                // SYNCDRAW waits a VBlank) — except the 0-byte "connecting"
+                // announcement and a file's final chunk, which always draw.
+                hidScanInput();
+                if (hidKeysDown() & KEY_B) cancelRequested = true;
+                const u64 now = osGetTime();
+                if (done > 0 && done < size && now - lastDrawMs < 100) return;
+                lastDrawMs = now;
 
+                const std::int64_t planDone = bytesBefore[idx] + done;
+                ui.setProgress(
+                    size > 0 ? static_cast<float>(static_cast<double>(done) / size) : 0.0f,
+                    plan.totalBytes > 0
+                        ? static_cast<float>(static_cast<double>(planDone) / plan.totalBytes)
+                        : 0.0f);
+                ui.setStatus(
+                    "File " + std::to_string(idx + 1) + "/" + std::to_string(total) +
+                    (done == 0 ? "  connecting..."
+                               : "  " + bytesHuman(done) + " / " + bytesHuman(size)) +
+                    "   Total " + bytesHuman(planDone) + " / " + bytesHuman(plan.totalBytes) +
+                    "   B: cancel");
+                ui.draw();
+              },
+              [&] { return cancelRequested; });
+          ui.clearProgress();
+
+          bool anyCancelled = false;
           std::vector<std::string> rows;
           for (const auto& r : report.files) {
+            if (r.status == DownloadStatus::Cancelled) anyCancelled = true;
             const char* tag = r.status == DownloadStatus::Ok ? "[ok] "
                               : r.status == DownloadStatus::Md5Mismatch ? "[md5!] "
                               : r.status == DownloadStatus::WriteError ? "[write!] "
                               : r.status == DownloadStatus::UnsafePath ? "[path!] "
-                                                                       : "[net!] ";
+                              : r.status == DownloadStatus::Cancelled ? "[stop] "
+                                                                      : "[net!] ";
             rows.push_back(tag + r.name);
           }
           ui.setList(std::move(rows));
-          ui.setStatus(std::string(report.allOk() ? "All files verified. " : "Some files failed. ") +
+          ui.setStatus(std::string(report.allOk() ? "All files verified. "
+                                   : anyCancelled ? "Cancelled. "
+                                                  : "Some files failed. ") +
                        "B: back   START: quit");
           screen = Screen::Done;
         }
