@@ -8,6 +8,7 @@ import {
   DownloadPlanResponseSchema,
   ItemDetailResponseSchema,
   ItemPageResponseSchema,
+  ResolveResponseSchema,
 } from "@rom-archive/contract";
 
 import type { GameMetadata } from "@/server/metadata";
@@ -267,5 +268,95 @@ describe("GET /api/metadata", () => {
     // The libretro floor still preserves a usable title from the ROM name.
     expect(meta.title).toBe("Metroid Fusion");
     expect(calls.some((u) => u.includes("/download/"))).toBe(false);
+  });
+});
+
+describe("POST /api/resolve", () => {
+  it("resolves a bundle pointer to a schema-valid ResolveResponse with all files", async () => {
+    const { calls } = stubFetch(realMetadata);
+    const { POST } = await import("./resolve/route");
+    const res = await POST(
+      new Request("http://t/api/resolve", {
+        method: "POST",
+        body: JSON.stringify({ v: 1, id: "gbahomebrew" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const parsed = ResolveResponseSchema.parse(await res.json());
+    expect(parsed.id).toBe("gbahomebrew");
+    expect(parsed.console).toBe("gba");
+    expect(parsed.files).toHaveLength(10);
+    // metadata only — never a ROM byte or cover image
+    expect(calls.some((u) => u.includes("/download/"))).toBe(false);
+    expect(calls.some((u) => u.includes("thumbnails.libretro.com"))).toBe(false);
+  });
+
+  it("resolves a single-file pointer whose filename has spaces and parens", async () => {
+    // The exact case a GET transport would silently break: the device POSTs
+    // the pointer as a JSON body so the filename needs no URL-encoding.
+    stubFetch(realMetadata);
+    const { POST } = await import("./resolve/route");
+    const res = await POST(
+      new Request("http://t/api/resolve", {
+        method: "POST",
+        body: JSON.stringify({
+          v: 1,
+          id: "gbahomebrew",
+          file: "Anguna - Warriors of Virtue (USA) (Unl).gba",
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const parsed = ResolveResponseSchema.parse(await res.json());
+    expect(parsed.files).toHaveLength(1);
+    expect(parsed.files[0]!.name).toBe(
+      "Anguna - Warriors of Virtue (USA) (Unl).gba",
+    );
+  });
+
+  it("404s on an id not in the curated catalog (no upstream fetch)", async () => {
+    const { calls } = stubFetch(realMetadata);
+    const { POST } = await import("./resolve/route");
+    const res = await POST(
+      new Request("http://t/api/resolve", {
+        method: "POST",
+        body: JSON.stringify({ v: 1, id: "not-in-catalog" }),
+      }),
+    );
+    expect(res.status).toBe(404);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("404s on a file absent from the item", async () => {
+    stubFetch(realMetadata);
+    const { POST } = await import("./resolve/route");
+    const res = await POST(
+      new Request("http://t/api/resolve", {
+        method: "POST",
+        body: JSON.stringify({ v: 1, id: "gbahomebrew", file: "nope.gba" }),
+      }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("400s on a schema-invalid pointer", async () => {
+    stubFetch(realMetadata);
+    const { POST } = await import("./resolve/route");
+    const res = await POST(
+      new Request("http://t/api/resolve", {
+        method: "POST",
+        body: JSON.stringify({ v: 2, id: "gbahomebrew" }),
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("400s on an unparseable body", async () => {
+    stubFetch(realMetadata);
+    const { POST } = await import("./resolve/route");
+    const res = await POST(
+      new Request("http://t/api/resolve", { method: "POST", body: "not json" }),
+    );
+    expect(res.status).toBe(400);
   });
 });

@@ -3,10 +3,13 @@ import {
   DownloadPlanRequestSchema,
   ItemDetailResponseSchema,
   ItemPageResponseSchema,
+  ResolveResponseSchema,
+  ScanPointerSchema,
   type CatalogResponse,
   type DownloadPlanResponse,
   type ItemDetailResponse,
   type ItemPageResponse,
+  type ResolveResponse,
 } from "@rom-archive/contract";
 
 import { ArchiveError, fetchItemMetadata, type FetchLike } from "./archiveClient";
@@ -14,6 +17,7 @@ import { paginateFiles, type PaginateOptions } from "./paginate";
 import { findCatalogEntry, loadCatalog } from "./catalog";
 import { unknownMetadata, type GameMetadata } from "./metadata";
 import { resolveMetadata, type MetadataCache } from "./metadataService";
+import { ResolveError, resolveScan } from "./resolve";
 import { loadTgdbGenres } from "./tgdbGenres";
 import { buildDownloadPlan } from "./plan";
 
@@ -159,6 +163,35 @@ export async function handlePlan(
     const plan = buildDownloadPlan(entry.console, files, req);
     return { status: 200, body: plan };
   } catch (err) {
+    if (err instanceof ArchiveError) {
+      return { status: 502, body: { error: "archive.org metadata request failed" } };
+    }
+    throw err;
+  }
+}
+
+/**
+ * Resolve a scan pointer (the website "Send to 3DS" QR payload) into a concrete
+ * ResolveResponse, reusing the tested resolveScan. The device POSTs the pointer
+ * as a JSON body (POST, not GET, so ROM filenames with spaces/parens need no
+ * URL-encoding). A schema-invalid pointer is a 400; an id/file the catalog or
+ * item doesn't contain surfaces as ResolveError.status (404).
+ */
+export async function handleResolve(
+  rawBody: unknown,
+  fetchImpl: FetchLike,
+): Promise<HandlerResult<ResolveResponse | ErrorBody>> {
+  const parsed = ScanPointerSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return { status: 400, body: { error: "invalid scan pointer" } };
+  }
+  try {
+    const resolved = await resolveScan(parsed.data, fetchImpl);
+    return { status: 200, body: ResolveResponseSchema.parse(resolved) };
+  } catch (err) {
+    if (err instanceof ResolveError) {
+      return { status: err.status, body: { error: err.message } };
+    }
     if (err instanceof ArchiveError) {
       return { status: 502, body: { error: "archive.org metadata request failed" } };
     }
