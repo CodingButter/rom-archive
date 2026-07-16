@@ -123,6 +123,32 @@ Recorded honest starting state.
 - Host doctest suite unaffected: 27 cases / 210 assertions green.
 - Boundary clean (grep): only `qr_camera_3ds.cpp` includes `quirc.h` / uses
   `CAMU_`; main.cpp and core see none of it.
-## Phase 5 — Scan screen wiring (PENDING)
+## Phase 5 — Wire Scan screen -> /api/resolve -> download (DONE)
+- `ApiClient::resolveScan(const ScanPointer&) -> std::optional<ResolveResponse>`:
+  POSTs `serializeScanPointer(pointer)` to `/api/resolve`, parses with
+  `parseResolveResponse` (POST reuses the proven `fetchPlan` pattern; ROM
+  filenames with spaces/parens travel in the JSON body, no URL-encoding).
+- New top-level `Screen::Menu` is now the entry point: two rows
+  ["Browse catalog", "Scan QR code"]. Catalog still loads once at boot (Browse
+  is instant); a catalog failure is non-fatal because Scan does not need it.
+- New `Screen::Scan`: `qrCamera.start()`; each frame `poll()` —
+  NoCode -> keep scanning; Found -> `parseScanPointer(payload)` (invalid ->
+  status hint, stay in Scan camera live; valid -> `stop()` -> `resolveScan` ->
+  `planFromResolve` -> Confirm); Error -> `stop()` -> Error. B cancels:
+  `stop()` -> Menu. Teardown guaranteed on every exit and on quit (`~QrCamera`).
+- `planFromResolve(ResolveResponse)`: straight field map ResolvedFile->PlanFile
+  (name/size/md5/downloadUrl/targetPath), fits=true, totalBytes carried. The
+  scanned plan runs the SAME Confirm -> Downloading -> Done path, so MD5
+  verification and the `roms/`-only path-safety guard in `downloadPlan()` apply
+  unchanged — nothing new bypasses them.
+- `confirmFromScan` flag routes Confirm's B: scanned -> Menu, browsed -> Item.
+  Done's B returns to Menu for both paths.
+
+### Gate: PASS
+- Device build compiles + links (Docker): `.cia` = 270784 bytes, `--check
+  passed`, exit 0. Zero warnings (one benign GCC-7.1 ABI note from an inlined
+  std::vector copy).
+- Host core suite unaffected: 27 cases / 210 assertions green.
+
 ## Phase 6 — Recognizable install (PENDING)
 ## Phase 7 — Ship checks (PENDING)

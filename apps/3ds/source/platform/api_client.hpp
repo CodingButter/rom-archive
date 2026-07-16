@@ -25,6 +25,11 @@ class ApiClient {
   // POST /api/plan with the request body; server does the fit math.
   std::optional<DownloadPlanResponse> fetchPlan(const DownloadPlanRequest& req);
 
+  // POST /api/resolve with a scan pointer (the website QR payload); the server
+  // derives the console + concrete file list. POST (not GET) so ROM filenames
+  // with spaces/parens travel as a JSON body and need no URL-encoding.
+  std::optional<ResolveResponse> resolveScan(const ScanPointer& pointer);
+
   // The transport, exposed so the download orchestrator can stream ROM bytes.
   Http3ds& http() { return http_; }
 

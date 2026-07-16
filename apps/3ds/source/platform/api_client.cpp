@@ -29,4 +29,11 @@ std::optional<DownloadPlanResponse> ApiClient::fetchPlan(const DownloadPlanReque
   return parseDownloadPlanResponse(body);
 }
 
+std::optional<ResolveResponse> ApiClient::resolveScan(const ScanPointer& pointer) {
+  const std::string requestJson = serializeScanPointer(pointer);
+  std::string body;
+  if (!http_.postJson(baseUrl_ + "/api/resolve", requestJson, body)) return std::nullopt;
+  return parseResolveResponse(body);
+}
+
 }  // namespace rom_archive

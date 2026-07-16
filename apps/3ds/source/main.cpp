@@ -15,15 +15,40 @@
 
 #include "platform/api_client.hpp"
 #include "platform/file_sink_3ds.hpp"
+#include "platform/qr_camera_3ds.hpp"
 #include "platform/ui.hpp"
 #include "rom_archive/contract.hpp"
 #include "rom_archive/download.hpp"
+#include "rom_archive/json.hpp"
 
 using namespace rom_archive;
 
 namespace {
 
-enum class Screen { Catalog, Item, Confirm, Downloading, Done, Error };
+enum class Screen { Menu, Catalog, Scan, Item, Confirm, Downloading, Done, Error };
+
+// Bridge a resolved scan into the plan shape the download orchestrator already
+// consumes. Every ResolvedFile carries the PlanFile fields (name/size/md5/
+// downloadUrl/targetPath); the server already did the fit/route work, so this
+// is a straight field map with fits = true (no SD-space exclusion on the QR
+// path — a single-ROM or bundle scan downloads what the server resolved).
+DownloadPlanResponse planFromResolve(const ResolveResponse& r) {
+  DownloadPlanResponse plan;
+  plan.fits = true;
+  plan.totalBytes = r.totalBytes;
+  plan.freeSpaceBytes = -1;
+  plan.excluded = std::nullopt;
+  for (const auto& f : r.files) {
+    PlanFile pf;
+    pf.name = f.name;
+    pf.sizeBytes = f.sizeBytes;
+    pf.md5 = f.md5;
+    pf.downloadUrl = f.downloadUrl;
+    pf.targetPath = f.targetPath;
+    plan.files.push_back(std::move(pf));
+  }
+  return plan;
+}
 
 std::string bytesHuman(std::int64_t bytes) {
   if (bytes < 0) return "?";
@@ -50,37 +75,109 @@ int main() {
   Ui ui;
   ApiClient api(API_BASE_URL);
 
-  Screen screen = Screen::Catalog;
+  Screen screen = Screen::Menu;
   std::string errorMsg;
 
   CatalogResponse catalog;
   ItemDetailResponse item;
   DownloadPlanResponse plan;
   DownloadReport report;
+  QrCamera qrCamera;
+  bool catalogLoaded = false;
+  bool confirmFromScan = false;
 
-  // Kick off by loading the catalog.
+  // Load the catalog once up front so Browse is instant, then present the top
+  // menu. A catalog failure is non-fatal here: Scan QR does not need it.
   ui.setStatus("Loading catalog...");
   ui.draw();
   if (auto c = api.fetchCatalog()) {
     catalog = *c;
-    std::vector<std::string> rows;
-    for (const auto& e : catalog.entries) rows.push_back(e.title);
-    if (rows.empty()) {
-      screen = Screen::Error;
-      errorMsg = "Catalog is empty.";
-    } else {
-      ui.setList(std::move(rows));
-      ui.setStatus("A: open   START: quit");
-    }
-  } else {
-    screen = Screen::Error;
-    errorMsg = "Failed to load catalog. Check the network.";
+    catalogLoaded = !catalog.entries.empty();
   }
+
+  auto showMenu = [&]() {
+    ui.setMultiSelect(false);
+    ui.setList({"Browse catalog", "Scan QR code"});
+    ui.setStatus("A: select   START: quit");
+    screen = Screen::Menu;
+  };
+  showMenu();
 
   while (ui.poll()) {
     switch (screen) {
+      case Screen::Menu: {
+        if (ui.pressedA()) {
+          if (ui.selectedIndex() == 0) {
+            // Browse catalog.
+            if (!catalogLoaded) {
+              screen = Screen::Error;
+              errorMsg = "Failed to load catalog. Check the network.";
+              break;
+            }
+            std::vector<std::string> rows;
+            for (const auto& e : catalog.entries) rows.push_back(e.title);
+            ui.setList(std::move(rows));
+            ui.setStatus("A: open   B: back");
+            screen = Screen::Catalog;
+          } else {
+            // Scan QR code.
+            ui.setList({});
+            if (qrCamera.start()) {
+              ui.setStatus("Point at a Send-to-3DS QR code   B: cancel");
+              screen = Screen::Scan;
+            } else {
+              screen = Screen::Error;
+              errorMsg = "Failed to open the camera.";
+            }
+          }
+        }
+        break;
+      }
+
+      case Screen::Scan: {
+        if (ui.pressedB()) {
+          qrCamera.stop();
+          showMenu();
+          break;
+        }
+        QrPoll poll = qrCamera.poll();
+        if (poll == QrPoll::Found) {
+          auto pointer = parseScanPointer(qrCamera.payload());
+          if (!pointer) {
+            ui.setStatus("Not a ROM Archive QR code. Keep scanning   B: cancel");
+            break;  // stay in Scan, camera still running
+          }
+          qrCamera.stop();
+          ui.setStatus("Resolving...");
+          ui.draw();
+          auto resolved = api.resolveScan(*pointer);
+          if (!resolved || resolved->files.empty()) {
+            screen = Screen::Error;
+            errorMsg = "That code did not resolve to any files.";
+            break;
+          }
+          plan = planFromResolve(*resolved);
+          confirmFromScan = true;
+          std::vector<std::string> rows;
+          for (const auto& f : plan.files)
+            rows.push_back("[x] " + f.name + "  (" + bytesHuman(f.sizeBytes) + ")");
+          ui.setList(std::move(rows));
+          ui.setStatus("Scanned. Total " + bytesHuman(plan.totalBytes) +
+                       "   A: download   B: back");
+          screen = Screen::Confirm;
+        } else if (poll == QrPoll::Error) {
+          qrCamera.stop();
+          screen = Screen::Error;
+          errorMsg = "Camera error while scanning.";
+        }
+        // QrPoll::NoCode: normal — keep polling.
+        break;
+      }
+
       case Screen::Catalog: {
-        if (ui.pressedA() && !catalog.entries.empty()) {
+        if (ui.pressedB()) {
+          showMenu();
+        } else if (ui.pressedA() && !catalog.entries.empty()) {
           const CatalogEntry& e = catalog.entries[ui.selectedIndex()];
           ui.setStatus("Loading item...");
           ui.draw();
@@ -129,6 +226,7 @@ int main() {
           ui.draw();
           if (auto p = api.fetchPlan(req)) {
             plan = *p;
+            confirmFromScan = false;
             std::vector<std::string> rows;
             for (const auto& f : plan.files)
               rows.push_back("[x] " + f.name + "  (" + bytesHuman(f.sizeBytes) + ")");
@@ -151,13 +249,19 @@ int main() {
 
       case Screen::Confirm: {
         if (ui.pressedB()) {
-          std::vector<std::string> rows;
-          for (const auto& f : item.files)
-            rows.push_back(f.name + "  (" + bytesHuman(f.sizeBytes) + ")");
-          ui.setList(std::move(rows));
-          ui.setMultiSelect(true);
-          ui.setStatus("X: select  A: plan (all if none)  L/R: page  B: back");
-          screen = Screen::Item;
+          if (confirmFromScan) {
+            // A scanned plan has no browsed item behind it — go back to the
+            // menu (where Scan QR can be re-entered).
+            showMenu();
+          } else {
+            std::vector<std::string> rows;
+            for (const auto& f : item.files)
+              rows.push_back(f.name + "  (" + bytesHuman(f.sizeBytes) + ")");
+            ui.setList(std::move(rows));
+            ui.setMultiSelect(true);
+            ui.setStatus("X: select  A: plan (all if none)  L/R: page  B: back");
+            screen = Screen::Item;
+          }
         } else if (ui.pressedA() && !plan.files.empty()) {
           screen = Screen::Downloading;
           FileSink3ds sink;
@@ -189,13 +293,7 @@ int main() {
       }
 
       case Screen::Done: {
-        if (ui.pressedB()) {
-          std::vector<std::string> rows;
-          for (const auto& e : catalog.entries) rows.push_back(e.title);
-          ui.setList(std::move(rows));
-          ui.setStatus("A: open   START: quit");
-          screen = Screen::Catalog;
-        }
+        if (ui.pressedB()) showMenu();
         break;
       }
 
