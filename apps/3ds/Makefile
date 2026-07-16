@@ -22,9 +22,9 @@ include $(DEVKITARM)/3ds_rules
 #---------------------------------------------------------------------------------
 TARGET		:=	rom-archive
 BUILD		:=	build
-SOURCES		:=	source source/platform core/src
+SOURCES		:=	source source/platform source/vendor/quirc core/src
 DATA		:=	data
-INCLUDES	:=	include source core/include
+INCLUDES	:=	include source source/vendor/quirc core/include
 GRAPHICS	:=	gfx
 GFXBUILD	:=	$(BUILD)
 
@@ -45,6 +45,10 @@ CFLAGS	:=	-g -Wall -O2 -mword-relocations \
 			$(ARCH)
 
 CFLAGS	+=	$(INCLUDE) -D__3DS__ -DAPI_BASE_URL='"$(API_BASE_URL)"'
+
+# Vendored quirc tuning: single-precision FPU on the 3DS, small region cap for
+# the embedded memory budget (see source/vendor/quirc/VERSION.md).
+CFLAGS	+=	-DQUIRC_FLOAT_TYPE=float -DQUIRC_MAX_REGIONS=254
 
 # The core is C++17. Exceptions are kept off (the on-device code paths do not
 # throw); RTTI stays off to match the platform ABI.

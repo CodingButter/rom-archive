@@ -90,7 +90,39 @@ Recorded honest starting state.
 - Whole-bundle path preserved (A with nothing checked → `selectedFileNames`
   nullopt); subset selection produces a `DownloadPlanRequest` with the exact
   chosen names.
-## Phase 4 — Camera + quirc (PENDING)
+## Phase 4 — Camera + quirc (DONE — device build green)
+- Vendored quirc `lib/` core under `apps/3ds/source/vendor/quirc/` (device tree
+  only): `decode.c`, `identify.c`, `quirc.c`, `version_db.c`, `quirc.h`,
+  `quirc_internal.h` + `LICENSE` (ISC) + `VERSION.md`. Upstream dlbeer/quirc
+  commit `927d680904dc95fdff4cd9d022eb374b438ff8f2`. Demo/test programs
+  (libjpeg/SDL/OpenCV) intentionally not vendored.
+- Device Makefile: added `source/vendor/quirc` to `SOURCES` + `INCLUDES`, plus
+  `-DQUIRC_FLOAT_TYPE=float` (single-precision FPU) and `-DQUIRC_MAX_REGIONS=254`
+  (embedded memory budget). Host `core/Makefile` untouched — quirc never enters
+  the host build.
+- `source/platform/qr_camera_3ds.{hpp,cpp}`: the ONLY module touching `cam:u`
+  and quirc. Interface is `QrCamera` with `start()/poll()/stop()` returning
+  `QrPoll{NoCode,Found,Error}` + `payload()`. Header keeps the quirc handle as
+  `void*` so it stays free of the C types.
+  - `start()`: `quirc_new`+`quirc_resize`, then `camInit`, select inner camera,
+    RGB565 output, activate, `GetMaxBytes`/`SetTransferBytes`, start capture.
+    Any failure tears down what was brought up and returns false.
+  - `poll()`: `SetReceiving` one frame, bounded 300ms `svcWaitSynchronization`
+    (UI stays live; timeout → NoCode, not fatal), RGB565→8-bit luma into
+    `quirc_begin` buffer, `quirc_end`, decode each found code (with `quirc_flip`
+    retry on ECC). "No code this frame" is the normal NoCode path.
+  - `stop()`: idempotent, order-safe (`StopCapture`→`Activate(SELECT_NONE)`→
+    `camExit`, then `quirc_destroy`); runs from dtor and every exit path.
+- Fixed a real compile error caught by the Docker build: `CAMU_GetMaxBytes`
+  takes `u32*` (not `u16*`); corrected the transfer-unit type.
+
+### Gate: PASS
+- Device build compiles + links quirc + module (Docker): `qr_camera_3ds.cpp`
+  and `quirc.c` compiled, linked into `rom-archive.elf`, `.cia` = 246720 bytes,
+  `--check passed`, exit 0.
+- Host doctest suite unaffected: 27 cases / 210 assertions green.
+- Boundary clean (grep): only `qr_camera_3ds.cpp` includes `quirc.h` / uses
+  `CAMU_`; main.cpp and core see none of it.
 ## Phase 5 — Scan screen wiring (PENDING)
 ## Phase 6 — Recognizable install (PENDING)
 ## Phase 7 — Ship checks (PENDING)
