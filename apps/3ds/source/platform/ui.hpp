@@ -6,6 +6,7 @@
 
 #include <citro2d.h>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -52,6 +53,12 @@ class Ui {
   // Render the current frame (list + status).
   void draw();
 
+  // Render the QR-scan frame: a live camera viewfinder on the top screen (the
+  // 400x240 RGB565 frame, or a blank screen while the first frame is pending)
+  // and the usual status line on the bottom. `newFrame` gates the texture
+  // re-upload so unchanged frames cost nothing.
+  void drawScan(const std::uint16_t* frame, bool newFrame);
+
  private:
   std::vector<std::string> items_;
   int selected_ = 0;
@@ -61,9 +68,19 @@ class Ui {
   std::string status_;
   u32 down_ = 0;
 
+  // Draw the bottom-screen status line into the current frame. Shared by
+  // draw() and drawScan().
+  void drawStatus();
+
   C3D_RenderTarget* top_ = nullptr;
   C3D_RenderTarget* bottom_ = nullptr;
   C2D_TextBuf textBuf_ = nullptr;
+
+  // Viewfinder texture for drawScan(), created lazily on first use. 512x256
+  // because GPU textures are power-of-two; the 400x240 frame lives in the
+  // top-left corner via the subtexture.
+  C3D_Tex scanTex_;
+  bool scanTexInit_ = false;
   u32 clrBg_ = 0;
   u32 clrText_ = 0;
   u32 clrHi_ = 0;

@@ -19,12 +19,14 @@ constexpr std::uint32_t kMaxRedirects = 8;
 // body. On a 3xx with a Location, the context is torn down and reopened against
 // the new URL (libctru does not transparently follow redirects).
 //
-// `insecure` disables TLS peer verification and is set ONLY for archive.org byte
-// downloads, whose modern certs the frozen 3DS root-CA store cannot validate;
-// integrity there is guaranteed by the mandatory MD5 check, not the transport.
-// Requests to our own API keep full verification.
+// TLS peer verification is disabled for ALL requests: the 3DS's frozen root-CA
+// store cannot validate modern certificate chains (archive.org, vercel.app, or
+// most of today's web). ROM bytes remain integrity-checked by the mandatory MD5
+// verification; trusting API metadata over an unverified channel is a documented
+// tradeoff and standard practice in 3DS homebrew (FBI, Anemone3DS, and
+// Universal-Updater all disable verification for the same reason).
 HttpResult run(std::string url, const ChunkSink& onChunk, const char* contentType,
-               const std::string* postBody, bool insecure) {
+               const std::string* postBody) {
   HttpResult result{false, 0, ""};
 
   for (std::uint32_t redirect = 0; redirect <= kMaxRedirects; ++redirect) {
@@ -36,12 +38,9 @@ HttpResult run(std::string url, const ChunkSink& onChunk, const char* contentTyp
       return result;
     }
 
-    // Peer verification is disabled only for archive.org byte downloads (see
-    // `insecure` note above); requests to our own API keep it on. Keep-alive off
+    // Peer verification off everywhere (see note above run()). Keep-alive off
     // keeps the redirect teardown simple.
-    if (insecure) {
-      httpcSetSSLOpt(&ctx, SSLCOPT_DisableVerify);
-    }
+    httpcSetSSLOpt(&ctx, SSLCOPT_DisableVerify);
     httpcSetKeepAlive(&ctx, HTTPC_KEEPALIVE_DISABLED);
     httpcAddRequestHeaderField(&ctx, "User-Agent", "rom-archive-3ds/1.0");
 
@@ -124,8 +123,7 @@ HttpResult run(std::string url, const ChunkSink& onChunk, const char* contentTyp
 }  // namespace
 
 HttpResult Http3ds::get(const std::string& url, const ChunkSink& onChunk) {
-  // Byte download from archive.org: verify-disable is scoped here only.
-  return run(url, onChunk, nullptr, nullptr, /*insecure=*/true);
+  return run(url, onChunk, nullptr, nullptr);
 }
 
 bool Http3ds::getString(const std::string& url, std::string& out) {
@@ -136,7 +134,7 @@ bool Http3ds::getString(const std::string& url, std::string& out) {
         out.append(reinterpret_cast<const char*>(data), len);
         return true;
       },
-      nullptr, nullptr, /*insecure=*/false);
+      nullptr, nullptr);
   return r.ok;
 }
 
@@ -148,7 +146,7 @@ bool Http3ds::postJson(const std::string& url, const std::string& body, std::str
         out.append(reinterpret_cast<const char*>(data), len);
         return true;
       },
-      "application/json", &body, /*insecure=*/false);
+      "application/json", &body);
   return r.ok;
 }
 

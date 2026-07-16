@@ -4,6 +4,7 @@
 #include "platform/ui.hpp"
 
 #include <algorithm>
+#include <cstring>
 
 namespace rom_archive {
 
@@ -29,6 +30,7 @@ Ui::Ui() {
 }
 
 Ui::~Ui() {
+  if (scanTexInit_) C3D_TexDelete(&scanTex_);
   C2D_TextBufDelete(textBuf_);
   C2D_Fini();
   C3D_Fini();
@@ -115,6 +117,58 @@ void Ui::draw() {
     y += kRowHeight;
   }
 
+  drawStatus();
+
+  C3D_FrameEnd(0);
+}
+
+void Ui::drawScan(const std::uint16_t* frame, bool newFrame) {
+  constexpr int kCamW = 400;
+  constexpr int kCamH = 240;
+  constexpr int kTexW = 512;
+  constexpr int kTexH = 256;
+
+  if (!scanTexInit_) {
+    C3D_TexInit(&scanTex_, kTexW, kTexH, GPU_RGB565);
+    C3D_TexSetFilter(&scanTex_, GPU_LINEAR, GPU_LINEAR);
+    std::memset(scanTex_.data, 0, kTexW * kTexH * 2);
+    scanTexInit_ = true;
+  }
+
+  // Upload the new frame by swizzling linear RGB565 into the GPU's tiled
+  // (Morton-order, 8x8 blocks) texture layout on the CPU — the standard
+  // FBI/Anemone viewfinder technique.
+  if (frame && newFrame) {
+    u16* dst = static_cast<u16*>(scanTex_.data);
+    for (u32 y = 0; y < kCamH; ++y) {
+      const u32 srcRow = y * kCamW;
+      for (u32 x = 0; x < kCamW; ++x) {
+        const u32 dstPos = ((((y >> 3) * (kTexW >> 3) + (x >> 3)) << 6) +
+                            ((x & 1) | ((y & 1) << 1) | ((x & 2) << 1) | ((y & 2) << 2) |
+                             ((x & 4) << 2) | ((y & 4) << 3)));
+        dst[dstPos] = frame[srcRow + x];
+      }
+    }
+  }
+
+  C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+  C2D_TextBufClear(textBuf_);
+
+  // Top screen: the viewfinder. The subtexture maps the 400x240 frame region
+  // out of the 512x256 texture (t is flipped: citro2d's v axis runs upward).
+  C2D_TargetClear(top_, clrBg_);
+  C2D_SceneBegin(top_);
+  static const Tex3DS_SubTexture kSub = {
+      kCamW, kCamH, 0.0f, 1.0f, kCamW / float(kTexW), 1.0f - kCamH / float(kTexH)};
+  C2D_Image img = {&scanTex_, &kSub};
+  C2D_DrawImageAt(img, 0.0f, 0.0f, 0.0f, nullptr, 1.0f, 1.0f);
+
+  drawStatus();
+
+  C3D_FrameEnd(0);
+}
+
+void Ui::drawStatus() {
   // Bottom screen: the status line.
   C2D_TargetClear(bottom_, clrBg_);
   C2D_SceneBegin(bottom_);
@@ -124,8 +178,6 @@ void Ui::draw() {
     C2D_TextOptimize(&st);
     C2D_DrawText(&st, C2D_WithColor, 8.0f, 8.0f, 0.0f, kTextScale, kTextScale, clrText_);
   }
-
-  C3D_FrameEnd(0);
 }
 
 }  // namespace rom_archive

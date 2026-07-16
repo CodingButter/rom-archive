@@ -123,7 +123,7 @@ int main() {
             // Scan QR code.
             ui.setList({});
             if (qrCamera.start()) {
-              ui.setStatus("Point at a Send-to-3DS QR code   B: cancel");
+              ui.setStatus("Aim the back camera at the QR code   B: cancel");
               screen = Screen::Scan;
             } else {
               screen = Screen::Error;
@@ -314,7 +314,14 @@ int main() {
         break;  // driven by the progress callback above
     }
 
-    ui.draw();
+    // Scan shows the live viewfinder instead of the list screen. Checked
+    // against the post-switch state so a transition out of Scan (decode,
+    // cancel, error) renders its new screen the same tick.
+    if (screen == Screen::Scan) {
+      ui.drawScan(qrCamera.frame(), qrCamera.takeNewFrame());
+    } else {
+      ui.draw();
+    }
   }
 
   httpcExit();

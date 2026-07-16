@@ -8,7 +8,7 @@ import { fetchItemPage } from "@/lib/api";
 import { coverUrlFor, scanPointerValue } from "@/lib/cover";
 import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/cover-image";
-import { QrCode } from "@/components/qr-code";
+import { QrZoom } from "@/components/qr-zoom";
 
 const PAGE_SIZE = 60;
 
@@ -74,9 +74,13 @@ function RomRow({
         </Button>
         {showQr ? (
           <div className="bg-background flex flex-col items-start gap-1 rounded-lg border p-3">
-            <QrCode value={scanPointerValue(id, file.name)} size={180} />
+            <QrZoom
+              value={scanPointerValue(id, file.name)}
+              size={180}
+              caption={file.name}
+            />
             <p className="text-muted-foreground text-xs">
-              Scan with the ROM Archive 3DS app.
+              Tap the code to enlarge it, then scan with the ROM Archive 3DS app.
             </p>
           </div>
         ) : null}

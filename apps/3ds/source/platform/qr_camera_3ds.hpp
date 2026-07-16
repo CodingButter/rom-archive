@@ -30,14 +30,16 @@ class QrCamera {
   QrCamera(const QrCamera&) = delete;
   QrCamera& operator=(const QrCamera&) = delete;
 
-  // Initialise cam:u and allocate the quirc decoder. Returns false if the
-  // camera or decoder could not be brought up (caller should surface an error
-  // and not poll). Safe to call once; a second start() without a stop() is a
-  // no-op that returns the current running state.
+  // Initialise cam:u (outer camera), arm the first frame receive, and allocate
+  // the quirc decoder. Returns false if the camera or decoder could not be
+  // brought up (caller should surface an error and not poll). Safe to call
+  // once; a second start() without a stop() is a no-op that returns the
+  // current running state.
   bool start();
 
-  // Capture one frame and feed it to quirc. Non-blocking-ish: it waits on the
-  // capture-complete event with a bounded timeout so the UI keeps rendering.
+  // Wait briefly (one frame's worth) for the armed capture to complete; when a
+  // frame lands, snapshot it for frame(), re-arm the next receive, and run one
+  // quirc identify+decode pass. Bounded so the UI keeps rendering.
   QrPoll poll();
 
   // Free the quirc decoder, stop capture, and shut down cam:u. Idempotent and
@@ -47,7 +49,28 @@ class QrCamera {
   // The decoded payload from the most recent Found poll().
   const std::string& payload() const { return payload_; }
 
+  // The most recent completed frame (RGB565, width()*height() pixels), for a
+  // live viewfinder. Null until the first frame arrives.
+  const std::uint16_t* frame() const {
+    return frameCopy_.empty() ? nullptr : frameCopy_.data();
+  }
+
+  // True once per newly captured frame; reading it clears the flag so the
+  // caller only re-uploads the viewfinder texture when the pixels changed.
+  bool takeNewFrame() {
+    const bool f = newFrame_;
+    newFrame_ = false;
+    return f;
+  }
+
+  static constexpr int width() { return 400; }
+  static constexpr int height() { return 240; }
+
  private:
+  // Tear down cam:u + capture state only (not quirc). Shared by stop() and the
+  // start() failure path.
+  void shutdownCamera();
+
   bool running_ = false;
   std::string payload_;
 
@@ -55,8 +78,24 @@ class QrCamera {
   // of the vendored C types; the .cpp owns the include.
   void* quirc_ = nullptr;
 
-  // The capture buffer (RGB565), sized to the capture dimensions.
-  std::vector<std::uint16_t> frame_;
+  // DMA target for CAMU_SetReceiving — must be linear memory (linearAlloc),
+  // NOT app heap. Owned here, freed in shutdownCamera().
+  std::uint16_t* camBuf_ = nullptr;
+
+  // CPU-side snapshot of the last completed frame; safe to read while the next
+  // DMA receive is overwriting camBuf_.
+  std::vector<std::uint16_t> frameCopy_;
+  bool newFrame_ = false;
+
+  // The armed receive: event handle (0 = not armed) and the transfer unit the
+  // capture was configured with.
+  std::uint32_t recvEvent_ = 0;
+  std::uint32_t transferUnit_ = 0;
+
+  // Consecutive poll() timeouts since the last good frame, and how many
+  // clear+restart recoveries have been attempted without one.
+  int timeouts_ = 0;
+  int recoveries_ = 0;
 };
 
 }  // namespace rom_archive

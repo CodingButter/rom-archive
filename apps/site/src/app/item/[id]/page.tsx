@@ -10,7 +10,7 @@ import { fetchCatalog } from "@/lib/api";
 import { scanPointerValue } from "@/lib/cover";
 import { BundleMosaic } from "@/components/bundle-mosaic";
 import { ItemMetadata } from "@/components/item-metadata";
-import { QrCode } from "@/components/qr-code";
+import { QrZoom } from "@/components/qr-zoom";
 import { RomList } from "@/components/rom-list";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -107,9 +107,10 @@ export default function ItemPage(): React.JSX.Element {
                 <Send className="h-5 w-5" />
               </span>
               <h2 className="text-xl font-semibold">Send whole item to 3DS</h2>
-              <QrCode value={scanPointerValue(id)} size={200} />
+              <QrZoom value={scanPointerValue(id)} size={200} caption={title} />
               <p className="text-muted-foreground max-w-sm text-center text-sm">
-                Scan to queue every ROM in this item on your 3DS.
+                Tap the code to enlarge it. Scan to queue every ROM in this item
+                on your 3DS.
               </p>
             </CardContent>
           </Card>
