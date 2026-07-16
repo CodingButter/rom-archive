@@ -1,0 +1,14 @@
+=== Deterministic markers (offline — the real gate) ===
+FAIL  DERIVE:ZIP  null
+FAIL  DERIVE:7Z  null
+FAIL  FALLBACK:NULL-FREE  9 mapped-console archive names
+FAIL  NO-DOUBLE-STRIP (dotted title)  null
+FAIL  NO-DOUBLE-STRIP (Game.v1.2)  null
+
+=== Best-effort hit-rate (live network — corroboration) ===
+INFO  HITRATE:NES  0/40 (0%)
+INFO  HITRATE:NES  below 60% bar — corroboration only, not a hard red
+INFO  HITRATE:GBA  0/40 (0%)
+INFO  HITRATE:GBA  below 60% bar — corroboration only, not a hard red
+
+FAIL — 5 deterministic failure(s)

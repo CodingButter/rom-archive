@@ -1,0 +1,18 @@
+TGDB:HIT source=tgdb title="Metroid Fusion"
+TGDB:CALLS=1
+OK    5 resolutions of the same game → exactly 1 TGDB request
+OK    resolved from TGDB with the real title
+CACHE:NEGATIVE tgdb_calls=1
+OK    4 resolutions of a no-match game → exactly 1 TGDB request (negative cached)
+FALLBACK:LIBRETRO no-key source=libretro tgdb_calls=0
+OK    missing key → libretro, no TGDB spend
+FALLBACK:LIBRETRO floored source=libretro tgdb_calls=0
+OK    allowance floored → libretro, no TGDB spend
+ENDPOINT:OK status=200 source=tgdb
+OK    handleMetadata known item → 200
+UNKNOWN:OK status=200 source=unknown
+OK    upstream throw → graceful 200, never 5xx
+ENDPOINT:404 status=404
+OK    unknown catalog id → 404
+
+PROOF: GREEN — budget shield + negative caching + libretro fallback + graceful endpoint all verified on branch

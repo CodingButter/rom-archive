@@ -1,0 +1,2 @@
+OK (expected): apps/site/src/lib/mosaic-sample.ts does not exist at 8779e40^
+MOSAIC PROOF: FAIL (helper absent at base)

@@ -1,0 +1,7 @@
+== building @rom-archive/api ==
+
+> @rom-archive/api@0.0.0 build /home/codingbutter/rom-archive/apps/api
+> tsc -p tsconfig.json
+
+== copying fixtures into dist ==
+== running demo ==

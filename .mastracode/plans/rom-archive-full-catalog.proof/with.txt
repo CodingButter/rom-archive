@@ -1,0 +1,35 @@
+Starting `next start` on 3411 (expects a prior `next build`)...
+
+Driving GET /api/item on http://localhost:3411 for "No-Intro_NES"...
+
+OK    full-list 200
+OK    full-list has thousands of ROMs  files=5359
+OK    full-list has NO paging keys
+OK    page 1 status 200
+OK    page 1 bounded to pageSize  files=60
+OK    page 1 total === full count  total=5359
+OK    page 1 echoes page/pageSize
+OK    search 200
+OK    search "Mario" narrows the set  total=81
+OK    every returned file matches q (case-insensitive)
+OK    out-of-range page empty slice  page=190
+OK    out-of-range page keeps correct total
+OK    per-ROM ScanPointer valid  {"v":1,"id":"No-Intro_NES","file":"'89 Dennou Kyuusei Uranai (Japan).zip"}
+OK    whole-bundle ScanPointer valid (no file)  {"v":1,"id":"No-Intro_NES"}
+
+RESULT: all checks passed.
+Verifying 11 catalog ids against live archive.org...
+
+OK    nes  No-Intro_NES  roms=5359  e.g. "'89 Dennou Kyuusei Uranai (Japan).zip"
+OK    snes No-Intro_Super_Nintendo_SNES  roms=3996  e.g. "'96 Zenkoku Koukou Soccer Senshuken (Japan).zip"
+OK    gba  No-Intro_GBA  roms=3381  e.g. "007 - Everything or Nothing (Japan).7z"
+OK    gbc  No-Intro_GBC  roms=1931  e.g. "007 - The World Is Not Enough (USA, Europe).7z"
+OK    gb   No-Intro_GB  roms=1896  e.g. "10-Pin Bowling (USA) (Proto).7z"
+OK    nds  ni-n-ds-dec_202401  roms=266  e.g. "007 - Blood Stone (Canada).7z"
+OK    md   ef_mega_genesis_no-intro_2024-04-21  roms=3264  e.g. "007 Shitou - The Duel (Japan).zip"
+OK    sms  nointro.ms-mkiii  roms=696  e.g. "11 Hap Gam-Boy (Korea) (Unl).7z"
+OK    gg   nointro.gg  roms=820  e.g. "5 in One FunPak (USA).7z"
+OK    pce  ef_pce_No-Intro_2024  roms=480  e.g. "1941 - Counter Attack (Japan).zip"
+OK    gba  gbahomebrew  roms=10  e.g. "Anguna - Warriors of Virtue (USA) (Unl).gba"
+
+RESULT: all 11 ids yield >=1 md5-bearing ROM file.

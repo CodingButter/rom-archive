@@ -1,0 +1,10 @@
+OK    SPREAD  first10=[70,53,105,171,126,112,255,90,82,92]
+OK    DEDUPE  tiles=3
+OK    BOUND  fetches=14 tiles=1 distinctPages=13
+INFO  DISTINCT:FIRST10  2
+INFO  DISTINCT:RANDOM  10
+OK    DISTINCT:FIRST10<=2  2 distinct covers from the first-10 007 variants
+OK    DISTINCT:RANDOM>=8  10 distinct covers from a wide real DS sample
+INFO  LIVE:DS  266 .7z members; first="007 - Blood Stone (Canada).7z"
+
+MOSAIC PROOF: PASS

@@ -1,0 +1,12 @@
+=== Deterministic markers (offline — the real gate) ===
+OK    DERIVE:ZIP  https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/Contra%20(USA).png
+OK    DERIVE:7Z  https://thumbnails.libretro.com/Nintendo%20-%20Game%20Boy%20Advance/Named_Boxarts/Metroid%20Fusion%20(USA).png
+OK    FALLBACK:NULL-FREE  9 mapped-console archive names
+OK    NO-DOUBLE-STRIP (dotted title)  https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/Super%20Mario%20Bros.%20(World).png
+OK    NO-DOUBLE-STRIP (Game.v1.2)  https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/Game.v1.2.png
+
+=== Best-effort hit-rate (live network — corroboration) ===
+INFO  HITRATE:NES  34/40 (85%)
+INFO  HITRATE:GBA  39/40 (98%)
+
+PASS — 0 deterministic failure(s)
